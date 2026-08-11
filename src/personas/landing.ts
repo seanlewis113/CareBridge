@@ -278,12 +278,18 @@ function showPersonaLogin(persona: Persona, needsPin: boolean): void {
     e.preventDefault();
     const pinInput = form.querySelector('#pin') as HTMLInputElement | null;
     const pin = currentPin || pinInput?.value || '';
-    const ok = await signInAsPersona(persona, pin);
-    if (ok) {
-      close();
-      await navigate(personaHome(persona));
-    } else {
-      errorEl.textContent = 'Incorrect PIN. Try again.';
+    try {
+      const ok = await signInAsPersona(persona, pin);
+      if (ok) {
+        close();
+        await navigate(personaHome(persona));
+      } else {
+        errorEl.textContent = 'Incorrect PIN. Try again.';
+        errorEl.style.display = 'block';
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Sign-in failed. Please try email access below.';
+      errorEl.textContent = message;
       errorEl.style.display = 'block';
     }
   });
