@@ -1,0 +1,268 @@
+.clock-picker-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.clock-picker-trigger {
+  flex: 1;
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 0.65rem 0.85rem;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  background: white;
+  font: inherit;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.clock-picker-trigger-empty {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.clock-picker-trigger:hover {
+  border-color: var(--color-primary);
+  background: var(--color-bg);
+}
+
+.clock-picker-clear {
+  min-height: var(--touch-min);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  background: white;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  padding: 0.65rem 0.75rem;
+  cursor: pointer;
+}
+
+.clock-picker-clear:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+}
+
+.clock-picker-trigger-lg {
+  min-height: 56px;
+  font-size: 1.5rem;
+  text-align: center;
+}
+
+body.clock-picker-open {
+  overflow: hidden;
+}
+
+/* Clock picker modal */
+.clock-picker-overlay,
+.ampm-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(44, 36, 22, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.clock-picker-overlay[hidden],
+.ampm-picker-overlay[hidden] {
+  display: none;
+}
+
+.clock-picker-panel {
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.35rem 1.1rem;
+  width: min(320px, 100%);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.cp-header {
+  text-align: center;
+  margin-bottom: 0.85rem;
+}
+
+.cp-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.cp-display {
+  font-size: 2.4rem;
+  font-weight: 900;
+  line-height: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  color: var(--color-text);
+}
+
+.cp-display .dim {
+  color: var(--color-border);
+}
+
+.cp-display .active {
+  color: var(--color-primary-dark);
+}
+
+.cp-display #cp-disp-h,
+.cp-display #cp-disp-m {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0 2px;
+}
+
+.cp-display #cp-disp-h:hover,
+.cp-display #cp-disp-m:hover {
+  background: var(--color-bg);
+}
+
+.cp-face-wrap {
+  display: flex;
+  justify-content: center;
+  margin: 0.35rem 0 0.65rem;
+}
+
+.cp-face {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  max-width: 72vw;
+  max-height: 72vw;
+  border-radius: 50%;
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  touch-action: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cp-hand {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  width: 3px;
+  height: 38%;
+  margin-left: -1.5px;
+  background: var(--color-primary);
+  border-radius: 3px;
+  transform-origin: center bottom;
+  transition: transform 0.12s ease-out;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.cp-center-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  background: var(--color-primary);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.cp-num {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--color-text-muted);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: background 0.12s, color 0.12s, transform 0.12s;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.cp-num.sel {
+  background: var(--color-primary);
+  color: white;
+  transform: translate(-50%, -50%) scale(1.12);
+  z-index: 3;
+}
+
+.cp-hint {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* AM/PM commit popup */
+.ampm-picker {
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.1rem 1.35rem 1rem;
+  width: min(240px, 100%);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+.ap-time {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--color-primary-dark);
+  margin-bottom: 0.25rem;
+}
+
+.ap-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.85rem;
+}
+
+.ap-btns {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ap-btns button {
+  flex: 1;
+  min-height: var(--touch-min);
+  font-size: 1rem;
+  font-weight: 800;
+  padding: 0.75rem 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+  border: 2px solid var(--color-border);
+  background: white;
+  color: var(--color-text);
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+
+.ap-btns button:hover {
+  background: var(--color-bg);
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+}
+
+.ap-btns button:active {
+  transform: scale(0.97);
+}

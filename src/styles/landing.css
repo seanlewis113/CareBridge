@@ -1,0 +1,270 @@
+.landing {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  background: linear-gradient(165deg, #fdf6ec 0%, #fce8d0 45%, #f5e0c8 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.landing::before {
+  content: '';
+  position: absolute;
+  top: -20%;
+  right: -15%;
+  width: 50vw;
+  height: 50vw;
+  max-width: 400px;
+  max-height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(230, 126, 34, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.landing::after {
+  content: '';
+  position: absolute;
+  bottom: -10%;
+  left: -10%;
+  width: 40vw;
+  height: 40vw;
+  max-width: 320px;
+  max-height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(139, 115, 85, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.landing > * {
+  position: relative;
+  z-index: 1;
+}
+
+.landing-hero {
+  margin-bottom: 2.5rem;
+}
+
+.landing-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.landing-logo-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  color: white;
+  box-shadow: var(--shadow-fab);
+}
+
+.landing-logo-mark .icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.landing-hero h1 {
+  font-size: clamp(2.25rem, 7vw, 3.25rem);
+  color: var(--color-primary-dark);
+  margin: 0;
+}
+
+.landing-hero p {
+  font-size: 1.125rem;
+  color: var(--color-text-muted);
+  max-width: 420px;
+  margin: 0.75rem auto 0;
+  line-height: 1.6;
+}
+
+.persona-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  width: 100%;
+  max-width: 720px;
+}
+
+.persona-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 1.75rem 1.25rem;
+  background: white;
+  border: 2px solid transparent;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+  min-height: 160px;
+  box-shadow: var(--shadow-card);
+}
+
+.persona-btn:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-3px);
+}
+
+.persona-btn:active {
+  transform: translateY(-1px) scale(0.99);
+}
+
+.persona-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius);
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+}
+
+.persona-btn-icon .icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.persona-btn-label {
+  font-size: 1.125rem;
+  font-weight: 800;
+  font-family: var(--font-display);
+}
+
+.persona-btn-desc {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.pin-form {
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+.pin-input {
+  font-size: 1.5rem !important;
+  text-align: center;
+  letter-spacing: 0.5rem;
+}
+
+.landing-footer {
+  margin-top: 2.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  max-width: 420px;
+  width: 100%;
+}
+
+.landing-footer a {
+  color: var(--color-primary);
+}
+
+.landing-demo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  background: white;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  box-shadow: var(--shadow);
+  margin-bottom: 1rem;
+}
+
+.landing-demo-badge .icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-primary);
+}
+
+.email-login {
+  margin-top: 1.5rem;
+  max-width: 400px;
+  width: 100%;
+  text-align: left;
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 0.5rem 1.25rem 1.25rem;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--color-border);
+}
+
+.email-login summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0.75rem 0;
+  color: var(--color-text);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.email-login summary .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.email-login summary::-webkit-details-marker {
+  display: none;
+}
+
+.email-login summary::before {
+  content: '▸';
+  font-size: 0.85rem;
+  color: var(--color-primary);
+  transition: transform var(--transition-fast);
+}
+
+.email-login[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.email-access-panel {
+  margin-top: 0.75rem;
+}
+
+.email-auth-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.email-auth-tab {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: white;
+  color: var(--color-text-muted);
+  min-height: 40px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.email-auth-tab:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+
+.email-auth-tab.active {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+}

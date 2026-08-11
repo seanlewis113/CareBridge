@@ -1,0 +1,156 @@
+export async function hashPin(pin: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pin + ':moms-care-salt');
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export async function verifyPin(pin: string, hash: string | null): Promise<boolean> {
+  if (!hash) return pin.length >= 4;
+  const inputHash = await hashPin(pin);
+  return inputHash === hash;
+}
+
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+}
+
+export function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+export function formatTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+export function formatDateTime(dateStr: string): string {
+  return `${formatDate(dateStr)} at ${formatTime(dateStr)}`;
+}
+
+export function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+export function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+export function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  attrs: Record<string, string | boolean | number | null | undefined> = {},
+  ...children: (Node | string | null | undefined)[]
+): HTMLElementTagNameMap[K] {
+  const element = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === null || value === undefined || value === false) continue;
+    if (key === 'className') {
+      element.className = String(value);
+    } else if (key.startsWith('on') && typeof value === 'function') {
+      element.addEventListener(key.slice(2).toLowerCase(), value as EventListener);
+    } else if (value === true) {
+      element.setAttribute(key, '');
+    } else {
+      element.setAttribute(key, String(value));
+    }
+  }
+  for (const child of children) {
+    if (child == null) continue;
+    element.append(typeof child === 'string' ? document.createTextNode(child) : child);
+  }
+  return element;
+}
+
+export function clearElement(element: HTMLElement): void {
+  element.replaceChildren();
+}
+
+export function showModal(title: string, content: HTMLElement, onClose?: () => void): () => void {
+  const overlay = el('div', { className: 'modal-overlay' });
+  const modal = el('div', { className: 'modal', role: 'dialog', 'aria-modal': 'true' });
+  const header = el('div', { className: 'modal-header' }, el('h2', {}, title));
+  const closeBtn = el('button', { className: 'modal-close', type: 'button', 'aria-label': 'Close' }, '×');
+  header.append(closeBtn);
+  modal.append(header, content);
+  overlay.append(modal);
+  document.body.append(overlay);
+  document.body.classList.add('modal-open');
+
+  const close = () => {
+    overlay.remove();
+    document.body.classList.remove('modal-open');
+    onClose?.();
+  };
+
+  closeBtn.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+
+  return close;
+}
+
+export function showToast(message: string, type: 'success' | 'error' | 'info' = 'info'): void {
+  let container = document.querySelector('.toast-container') as HTMLElement | null;
+  if (!container) {
+    container = el('div', { className: 'toast-container' });
+    document.body.append(container);
+  }
+  const toast = el('div', { className: `toast toast-${type}` }, message);
+  container.append(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+export function emptyState(
+  iconEl: SVGSVGElement,
+  title: string,
+  description: string,
+  action?: HTMLElement
+): HTMLElement {
+  const wrap = el('div', { className: 'empty-state' },
+    el('div', { className: 'empty-state-icon' }, iconEl),
+    el('h3', {}, title),
+    el('p', {}, description)
+  );
+  if (action) wrap.append(action);
+  return wrap;
+}
+
+export function timeOfDayClass(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'time-morning';
+  if (hour < 17) return 'time-afternoon';
+  return 'time-evening';
+}
+
+export function confirmDialog(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const content = el('div', { className: 'modal-body' }, el('p', {}, message));
+    const actions = el('div', { className: 'modal-actions' });
+    const cancelBtn = el('button', { className: 'btn btn-secondary', type: 'button' }, 'Cancel');
+    const okBtn = el('button', { className: 'btn btn-primary', type: 'button' }, 'Confirm');
+    actions.append(cancelBtn, okBtn);
+    content.append(actions);
+
+    const close = showModal('Please confirm', content);
+    cancelBtn.addEventListener('click', () => {
+      close();
+      resolve(false);
+    });
+    okBtn.addEventListener('click', () => {
+      close();
+      resolve(true);
+    });
+  });
+}
