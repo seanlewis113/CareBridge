@@ -80,6 +80,17 @@ export async function renderLanding(): Promise<void> {
 
 function createEmailAccessPanel(): HTMLElement {
   const wrapper = el('div', { className: 'email-access-panel' });
+
+  if (isSupabaseConfigured) {
+    wrapper.append(
+      el('p', { style: 'margin:0.75rem 0 0;font-size:0.9rem;color:var(--color-text-muted)' },
+        'Accounts are created by your family admin. Sign in with the email and password they provided.'
+      ),
+      createEmailLoginForm()
+    );
+    return wrapper;
+  }
+
   const tabBar = el('div', { className: 'email-auth-tabs' });
   const signInTab = el('button', { type: 'button', className: 'email-auth-tab active' }, 'Sign in');
   const signUpTab = el('button', { type: 'button', className: 'email-auth-tab' }, 'Sign up');

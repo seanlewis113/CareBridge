@@ -5,7 +5,7 @@ export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
 export interface EventRecurrenceRule {
   frequency: RecurrenceFrequency;
   interval: number;
-  count: number;
+  count?: number;
 }
 
 const RECURRENCE_PREFIX = '[[MC_RECURRENCE]]';
@@ -28,13 +28,14 @@ export function parseRecurringRule(event: CalendarEvent): EventRecurrenceRule | 
     const parsed = JSON.parse(firstLine) as Partial<EventRecurrenceRule>;
     if (!parsed.frequency || !['daily', 'weekly', 'monthly'].includes(parsed.frequency)) return null;
     const interval = Number(parsed.interval);
-    const count = Number(parsed.count);
     if (!Number.isFinite(interval) || interval < 1) return null;
-    if (!Number.isFinite(count) || count < 1) return null;
+    const hasCount = parsed.count != null;
+    const count = hasCount ? Number(parsed.count) : undefined;
+    if (hasCount && (!Number.isFinite(count) || count! < 1)) return null;
     return {
       frequency: parsed.frequency,
       interval: Math.floor(interval),
-      count: Math.floor(count),
+      ...(hasCount ? { count: Math.floor(count!) } : {}),
     };
   } catch {
     return null;
@@ -55,7 +56,8 @@ export function expandRecurringEvents(events: CalendarEvent[], from?: string, to
 
     const startSeed = new Date(event.start_at);
     const endSeed = new Date(event.end_at);
-    for (let i = 0; i < rule.count; i++) {
+    const maxOccurrences = rule.count ?? Number.MAX_SAFE_INTEGER;
+    for (let i = 0; i < maxOccurrences; i++) {
       const occurrenceStart = addFrequency(startSeed, rule.frequency, i * rule.interval);
       if (occurrenceStart > toDate) break;
       if (occurrenceStart < fromDate) continue;

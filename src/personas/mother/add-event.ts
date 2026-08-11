@@ -33,6 +33,10 @@ export function renderAddEventForm(onSuccess: () => void): HTMLElement {
     el('label', { for: 'event-recurrence' }, 'Repeat'),
     recurrenceSelect
   );
+  const noEndDateCheckbox = el('input', {
+    type: 'checkbox',
+    id: 'event-recurrence-no-end',
+  }) as HTMLInputElement;
   const occurrenceInput = el('input', {
     type: 'number',
     id: 'event-recurrence-count',
@@ -40,14 +44,25 @@ export function renderAddEventForm(onSuccess: () => void): HTMLElement {
     max: '365',
     value: '26',
   }) as HTMLInputElement;
-  const occurrenceGroup = el('div', { className: 'form-group' },
+  const occurrenceCountRow = el('div', { id: 'event-recurrence-count-row' },
     el('label', { for: 'event-recurrence-count' }, 'How many times'),
     occurrenceInput
   );
+  const occurrenceGroup = el('div', { className: 'form-group' },
+    el('label', { className: 'task-toggle-row', for: 'event-recurrence-no-end' },
+      noEndDateCheckbox,
+      el('span', {}, 'No end date')
+    ),
+    occurrenceCountRow
+  );
   occurrenceGroup.style.display = 'none';
-  recurrenceSelect.addEventListener('change', () => {
-    occurrenceGroup.style.display = recurrenceSelect.value === 'none' ? 'none' : '';
-  });
+  const syncRecurrenceFields = () => {
+    const repeats = recurrenceSelect.value !== 'none';
+    occurrenceGroup.style.display = repeats ? '' : 'none';
+    occurrenceCountRow.style.display = noEndDateCheckbox.checked ? 'none' : '';
+  };
+  recurrenceSelect.addEventListener('change', syncRecurrenceFields);
+  noEndDateCheckbox.addEventListener('change', syncRecurrenceFields);
 
   const errorEl = el('p', { style: 'color:var(--color-danger);display:none' });
   const submitBtn = el('button', { className: 'btn btn-primary btn-block btn-lg', type: 'submit' }, 'Save Event');
@@ -60,6 +75,7 @@ export function renderAddEventForm(onSuccess: () => void): HTMLElement {
     const date = (form.querySelector('#event-date') as HTMLInputElement).value;
     const time = (form.querySelector('#event-time') as HTMLInputElement).value.trim();
     const recurrenceValue = recurrenceSelect.value;
+    const noEndDate = noEndDateCheckbox.checked;
     const recurrenceCount = Math.max(2, Math.min(365, Number.parseInt(occurrenceInput.value || '26', 10) || 26));
     const safeTime = time || '00:00';
     const startAt = `${date}T${safeTime}:00`;
@@ -67,7 +83,11 @@ export function renderAddEventForm(onSuccess: () => void): HTMLElement {
     endDate.setHours(endDate.getHours() + 1);
     const recurrenceRule: EventRecurrenceRule | null = recurrenceValue === 'none'
       ? null
-      : { frequency: recurrenceValue as EventRecurrenceRule['frequency'], interval: 1, count: recurrenceCount };
+      : {
+          frequency: recurrenceValue as EventRecurrenceRule['frequency'],
+          interval: 1,
+          ...(noEndDate ? {} : { count: recurrenceCount }),
+        };
 
     try {
       await api.createCalendarEvent({

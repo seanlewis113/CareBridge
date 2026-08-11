@@ -125,6 +125,7 @@ export function renderAdminShell(content: HTMLElement, activePath: string): void
     { path: '/admin/reminders', label: 'Reminders', icon: 'bell' },
     { path: '/admin/visits', label: 'Visit Notes', icon: 'file-text' },
     { path: '/admin/documents', label: 'Documents', icon: 'folder' },
+    { path: '/admin/users', label: 'Users', icon: 'users' },
     { path: '/admin/finance', label: 'Financials', icon: 'dollar-sign' },
     { path: '/admin/settings', label: 'Settings', icon: 'settings' },
   ];

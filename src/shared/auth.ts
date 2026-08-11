@@ -98,7 +98,7 @@ export async function signUpWithEmail(
   return { needsEmailConfirmation: false };
 }
 
-export async function inviteUserByEmail(
+export async function inviteUserByAdmin(
   email: string,
   displayName: string,
   persona: Extract<Persona, 'family_caregiver' | 'hired_caregiver' | 'admin'>
@@ -108,17 +108,23 @@ export async function inviteUserByEmail(
   }
 
   const { error } = await getSupabase().auth.signInWithOtp({
-    email,
+    email: email.trim().toLowerCase(),
     options: {
       shouldCreateUser: true,
       emailRedirectTo: window.location.origin,
       data: {
-        display_name: displayName,
+        display_name: displayName.trim(),
         persona,
       },
     },
   });
   if (error) throw error;
+}
+
+export async function hasSupabaseAuth(): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+  const { data } = await getSupabase().auth.getSession();
+  return !!data.session?.user;
 }
 
 export async function refreshSessionFromSupabase(): Promise<Profile | null> {

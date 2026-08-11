@@ -9,13 +9,15 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "icons": "node scripts/generate-icons.mjs",
-    "postinstall": "node scripts/generate-icons.mjs"
+    "postinstall": "node scripts/generate-icons.mjs",
+    "supabase:deploy-create-user": "supabase functions deploy create-user --project-ref zliprdkszovsihdvzrye --use-api --yes"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "supabase": "^2.113.0",
     "typescript": "~5.7.2",
     "vite": "^6.2.0",
     "vite-plugin-pwa": "^0.21.1",

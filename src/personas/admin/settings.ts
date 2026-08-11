@@ -1,5 +1,5 @@
 import { api } from '../../shared/api';
-import { setMotherPin, setAdminSwitchPin, setFinancialPin, inviteUserByEmail } from '../../shared/auth';
+import { setMotherPin, setAdminSwitchPin, setFinancialPin } from '../../shared/auth';
 import { renderAdminShell } from '../shared/shell';
 import { el } from '../../shared/utils';
 import { isSupabaseConfigured } from '../../shared/supabase';
@@ -60,59 +60,6 @@ export async function renderAdminSettings(): Promise<void> {
   }
 
   content.append(form);
-
-  if (isSupabaseConfigured) {
-    const inviteCard = el('form', { className: 'card', style: 'max-width:520px;margin-top:1rem' });
-    inviteCard.append(
-      el('h3', {}, 'Invite user'),
-      el('p', { style: 'font-size:0.9rem;color:var(--color-text-muted)' },
-        'Send a magic-link invite. New users are added to the care team after they open the email link.'
-      ),
-      el('div', { className: 'form-group' },
-        el('label', { for: 'invite-name' }, 'Display name'),
-        el('input', { type: 'text', id: 'invite-name', required: 'true', placeholder: 'Jane Doe' })
-      ),
-      el('div', { className: 'form-group' },
-        el('label', { for: 'invite-email' }, 'Email'),
-        el('input', { type: 'email', id: 'invite-email', required: 'true', placeholder: 'you@email.com' })
-      ),
-      el('div', { className: 'form-group' },
-        el('label', { for: 'invite-role' }, 'Role'),
-        el('select', { id: 'invite-role' },
-          el('option', { value: 'family_caregiver' }, 'Family Caregiver'),
-          el('option', { value: 'hired_caregiver' }, 'Hired Caregiver'),
-          el('option', { value: 'admin' }, 'Admin')
-        )
-      ),
-      el('p', { id: 'invite-status', style: 'font-size:0.9rem;margin-bottom:0.75rem' }),
-      el('button', { className: 'btn btn-secondary', type: 'submit' }, 'Send Invite')
-    );
-    content.append(inviteCard);
-
-    inviteCard.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const status = inviteCard.querySelector('#invite-status') as HTMLElement;
-      const displayName = (inviteCard.querySelector('#invite-name') as HTMLInputElement).value.trim();
-      const email = (inviteCard.querySelector('#invite-email') as HTMLInputElement).value.trim();
-      const persona = (inviteCard.querySelector('#invite-role') as HTMLSelectElement).value as 'family_caregiver' | 'hired_caregiver' | 'admin';
-
-      if (!displayName) {
-        status.textContent = 'Please enter a display name.';
-        status.style.color = 'var(--color-danger)';
-        return;
-      }
-
-      try {
-        await inviteUserByEmail(email, displayName, persona);
-        status.textContent = `Invite sent to ${email}.`;
-        status.style.color = 'var(--color-success)';
-        inviteCard.reset();
-      } catch (err) {
-        status.textContent = err instanceof Error ? err.message : 'Invite failed.';
-        status.style.color = 'var(--color-danger)';
-      }
-    });
-  }
 
   form.querySelector('#text-scale')?.addEventListener('input', (e) => {
     const val = (e.target as HTMLInputElement).value;

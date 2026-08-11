@@ -16,6 +16,7 @@ import { renderAdminFinance } from './personas/admin/finance';
 import { renderAdminDocuments } from './personas/admin/documents';
 import { renderAdminVisits } from './personas/admin/visits';
 import { renderAdminSettings } from './personas/admin/settings';
+import { renderAdminUsers } from './personas/admin/users';
 import { renderCaregiverToday } from './personas/caregiver/today';
 import { renderCaregiverCalendar } from './personas/caregiver/calendar';
 import { renderCaregiverTasks } from './personas/caregiver/tasks';
@@ -91,6 +92,11 @@ function registerRoutes(): void {
   registerRoute('/admin/visits', async () => {
     if (!(await guardAdmin())) return;
     await renderAdminVisits();
+  });
+
+  registerRoute('/admin/users', async () => {
+    if (!(await guardAdmin())) return;
+    await renderAdminUsers();
   });
 
   registerRoute('/admin/settings', async () => {
