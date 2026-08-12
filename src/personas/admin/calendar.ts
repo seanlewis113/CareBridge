@@ -55,9 +55,7 @@ export async function renderAdminCalendar(): Promise<void> {
     };
 
     if (viewMode === 'grid') {
-      const gridScroll = el('div', { className: 'calendar-page-grid-scroll' });
-      gridScroll.append(renderCalendarGridView(events, eventActions));
-      eventsContainer.append(gridScroll);
+      eventsContainer.append(renderCalendarGridView(events, { ...eventActions, scrollable: true }));
       return;
     }
 

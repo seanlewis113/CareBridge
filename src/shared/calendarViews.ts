@@ -23,6 +23,7 @@ export interface CalendarListOptions {
 
 export interface CalendarGridOptions {
   showToolbar?: boolean;
+  scrollable?: boolean;
   onEdit?: (event: CalendarEvent) => void | Promise<void>;
 }
 
@@ -37,7 +38,18 @@ export function groupEventsByDay(events: CalendarEvent[]): [string, CalendarEven
 }
 
 export function scrollCalendarToToday(container: HTMLElement): void {
-  container.querySelector('.app-calendar-day--today')?.scrollIntoView({ block: 'center', inline: 'nearest' });
+  const todayEl = container.querySelector('.app-calendar-day--today');
+  if (!todayEl) return;
+
+  const scrollContainer = container.querySelector('.calendar-page-grid-scroll');
+  if (scrollContainer instanceof HTMLElement) {
+    const todayRect = todayEl.getBoundingClientRect();
+    const scrollRect = scrollContainer.getBoundingClientRect();
+    scrollContainer.scrollTop += todayRect.top - scrollRect.top - scrollRect.height / 2 + todayRect.height / 2;
+    return;
+  }
+
+  todayEl.scrollIntoView({ block: 'center', inline: 'nearest' });
 }
 
 export function renderCalendarViewToggle(
@@ -106,7 +118,14 @@ export function renderCalendarGridView(events: CalendarEvent[], options: Calenda
   for (const monthStart of buildMonthStarts(now, events)) {
     monthsWrap.append(renderCalendarMonth(monthStart, byDay, now, options));
   }
-  wrap.append(monthsWrap);
+
+  if (options.scrollable) {
+    const scrollArea = el('div', { className: 'calendar-page-grid-scroll' });
+    scrollArea.append(monthsWrap);
+    wrap.append(scrollArea);
+  } else {
+    wrap.append(monthsWrap);
+  }
 
   requestAnimationFrame(() => scrollCalendarToToday(wrap));
   return wrap;
