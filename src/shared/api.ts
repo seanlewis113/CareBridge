@@ -37,6 +37,19 @@ function updateLocal<T extends TableName>(table: T, updater: (items: LocalStore[
 
 type LocalStore = ReturnType<typeof loadLocalStore>;
 
+const SESSION_KEY = 'moms-care-session';
+
+function isMotherDeviceSession(): boolean {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return false;
+    const session = JSON.parse(raw) as { persona?: string };
+    return session.persona === 'mother';
+  } catch {
+    return false;
+  }
+}
+
 interface ActivityContext {
   profileId: string | null;
   persona: Persona | null;
@@ -51,6 +64,24 @@ export function setActivityContext(ctx: ActivityContext): void {
 export const api = {
   async getSettings(): Promise<AppSettings> {
     if (isSupabaseConfigured) {
+      const { data: authData } = await getSupabaseClient().auth.getSession();
+      if (!authData.session && isMotherDeviceSession()) {
+        const { data, error } = await db().rpc('get_mother_hub_settings');
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row) throw new Error('App settings not found');
+        return {
+          id: 'default',
+          mother_name: row.mother_name,
+          text_scale: row.text_scale,
+          mother_pin_hash: null,
+          admin_switch_pin_hash: null,
+          financial_pin_hash: null,
+          google_calendar_id: null,
+          google_refresh_token: null,
+        };
+      }
+
       const { data, error } = await db()
         .from('app_settings')
         .select('*')

@@ -601,8 +601,9 @@ button, input, select, textarea {
   left: max(0.35rem, env(safe-area-inset-left));
   z-index: 50;
   display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.35rem;
   padding: 0.25rem 0.5rem;
   font-size: 0.65rem;
   line-height: 1.25;
