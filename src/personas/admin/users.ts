@@ -116,7 +116,7 @@ function renderUserCard(profile: Profile, canEditRoles: boolean, refresh: () => 
 }
 
 function createUserForm(onSuccess: () => void): HTMLElement {
-  const form = el('form', {});
+  const form = el('form', { className: 'modal-body' });
 
   form.append(
     el('div', { className: 'form-group' },

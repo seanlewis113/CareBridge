@@ -4,9 +4,11 @@ import {
   signInAsPersona,
   signInWithEmail,
   signUpWithEmail,
+  signOut,
   getSession,
   refreshSessionFromSupabase,
   isAdminProfile,
+  isAuthenticated,
   restorePersonaFromProfile,
 } from '../shared/auth';
 import { navigate, personaHome, MODULE_SELECT_PATH } from '../shared/router';
@@ -150,7 +152,21 @@ export async function renderModuleSelect(): Promise<void> {
       }
     });
     footer.append(backBtn);
-  } else {
+  }
+
+  if (isAuthenticated()) {
+    const signOutBtn = el('button', { className: 'btn btn-ghost btn-block', type: 'button' },
+      icon('log-out'),
+      'Sign out'
+    );
+    signOutBtn.addEventListener('click', async () => {
+      await signOut();
+      navigate('/');
+    });
+    footer.append(signOutBtn);
+  }
+
+  if (!isAdminProfile()) {
     const backBtn = el('button', { className: 'btn btn-ghost btn-block', type: 'button' },
       icon('arrow-right'),
       'Back to sign in'

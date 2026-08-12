@@ -12,6 +12,7 @@ export interface LocalDataStore {
   family_updates: import('./types').FamilyUpdate[];
   financial_accounts: import('./types').FinancialAccount[];
   transactions: import('./types').Transaction[];
+  activity_log: import('./types').ActivityLog[];
 }
 
 function defaultStore(): LocalDataStore {
@@ -167,6 +168,7 @@ function defaultStore(): LocalDataStore {
       },
     ],
     transactions: [],
+    activity_log: [],
   };
 }
 
@@ -180,6 +182,7 @@ export function loadLocalStore(): LocalDataStore {
         ...task,
         show_on_mother_hub: task.show_on_mother_hub !== false,
       }));
+      if (!parsed.activity_log) parsed.activity_log = [];
       return parsed;
     }
   } catch {

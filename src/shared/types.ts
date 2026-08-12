@@ -130,6 +130,18 @@ export interface SessionState {
   financialUnlockedUntil: number | null;
 }
 
+export interface ActivityLog {
+  id: string;
+  profile_id: string | null;
+  persona: Persona | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  profile?: Profile;
+}
+
 export const PERSONA_LABELS: Record<Persona, string> = {
   mother: 'Mom',
   admin: 'Admin',

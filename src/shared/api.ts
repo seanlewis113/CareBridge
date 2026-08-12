@@ -2,11 +2,13 @@ import { getSupabase as getSupabaseClient, isSupabaseConfigured } from './supaba
 import { loadLocalStore, saveLocalStore } from './localStore';
 import { expandRecurringEvents, getSourceEventId } from './calendarRecurrence';
 import type {
+  ActivityLog,
   AppSettings,
   CalendarEvent,
   Document,
   FamilyUpdate,
   FinancialAccount,
+  Persona,
   Profile,
   Reminder,
   Task,
@@ -35,6 +37,17 @@ function updateLocal<T extends TableName>(table: T, updater: (items: LocalStore[
 
 type LocalStore = ReturnType<typeof loadLocalStore>;
 
+interface ActivityContext {
+  profileId: string | null;
+  persona: Persona | null;
+}
+
+let activityContext: ActivityContext = { profileId: null, persona: null };
+
+export function setActivityContext(ctx: ActivityContext): void {
+  activityContext = ctx;
+}
+
 export const api = {
   async getSettings(): Promise<AppSettings> {
     if (isSupabaseConfigured) {
@@ -58,6 +71,7 @@ export const api = {
         .select()
         .single();
       if (error) throw error;
+      await this.logActivity('settings.update', { metadata: { fields: Object.keys(updates) } });
       return data as AppSettings;
     }
     const settings = { ...getLocal('settings'), ...updates };
@@ -83,6 +97,11 @@ export const api = {
     if (isSupabaseConfigured) {
       const { data, error } = await db().from('profiles').upsert(profile).select().single();
       if (error) throw error;
+      await this.logActivity('profile.upsert', {
+        entityType: 'profile',
+        entityId: profile.id,
+        metadata: { display_name: profile.display_name, persona: profile.persona },
+      });
       return data as Profile;
     }
     updateLocal('profiles', (items) => {
@@ -123,6 +142,11 @@ export const api = {
       if (error) throw error;
       const created = data as CalendarEvent;
       await this.syncEventToGoogle(created);
+      await this.logActivity('calendar.create', {
+        entityType: 'calendar_event',
+        entityId: created.id,
+        metadata: { title: created.title },
+      });
       return created;
     }
 
@@ -139,6 +163,11 @@ export const api = {
         .select()
         .single();
       if (error) throw error;
+      await this.logActivity('calendar.update', {
+        entityType: 'calendar_event',
+        entityId: id,
+        metadata: updates,
+      });
       return data as CalendarEvent;
     }
     let updated!: CalendarEvent;
@@ -159,6 +188,7 @@ export const api = {
     if (isSupabaseConfigured) {
       const { error } = await db().from('calendar_events').delete().eq('id', sourceId);
       if (error) throw error;
+      await this.logActivity('calendar.delete', { entityType: 'calendar_event', entityId: sourceId });
       return;
     }
     updateLocal('calendar_events', (items) => items.filter((e) => e.id !== sourceId));
@@ -170,7 +200,9 @@ export const api = {
         body: { action: 'pull' },
       });
       if (error) throw error;
-      return (data?.events ?? []) as CalendarEvent[];
+      const events = (data?.events ?? []) as CalendarEvent[];
+      await this.logActivity('calendar.sync', { metadata: { event_count: events.length } });
+      return events;
     }
     return this.getCalendarEvents();
   },
@@ -203,6 +235,11 @@ export const api = {
     if (isSupabaseConfigured) {
       const { data, error } = await db().from('tasks').insert(newTask).select().single();
       if (error) throw error;
+      await this.logActivity('task.create', {
+        entityType: 'task',
+        entityId: (data as Task).id,
+        metadata: { title: newTask.title },
+      });
       return { ...(data as Task), checklist: newTask.checklist, show_on_mother_hub: (data as Task).show_on_mother_hub !== false };
     }
     updateLocal('tasks', (items) => [...items, newTask]);
@@ -213,6 +250,11 @@ export const api = {
     if (isSupabaseConfigured) {
       const { data, error } = await db().from('tasks').update(updates).eq('id', id).select().single();
       if (error) throw error;
+      await this.logActivity('task.update', {
+        entityType: 'task',
+        entityId: id,
+        metadata: updates,
+      });
       return data as Task;
     }
     let updated!: Task;
@@ -232,6 +274,7 @@ export const api = {
     if (isSupabaseConfigured) {
       const { error } = await db().from('tasks').delete().eq('id', id);
       if (error) throw error;
+      await this.logActivity('task.delete', { entityType: 'task', entityId: id });
       return;
     }
     updateLocal('tasks', (items) => items.filter((t) => t.id !== id));
@@ -252,6 +295,11 @@ export const api = {
     if (isSupabaseConfigured) {
       const { data, error } = await db().from('task_assignments').insert(assignment).select().single();
       if (error) throw error;
+      await this.logActivity('task.assign', {
+        entityType: 'task',
+        entityId: taskId,
+        metadata: { profile_id: profileId },
+      });
       return data as TaskAssignment;
     }
     updateLocal('task_assignments', (items) => [...items, assignment]);
@@ -266,6 +314,11 @@ export const api = {
         .eq('task_id', taskId)
         .eq('profile_id', profileId);
       if (error) throw error;
+      await this.logActivity('task.unassign', {
+        entityType: 'task',
+        entityId: taskId,
+        metadata: { profile_id: profileId },
+      });
       return;
     }
     updateLocal('task_assignments', (items) =>
@@ -291,6 +344,11 @@ export const api = {
     if (isSupabaseConfigured) {
       const { data, error } = await db().from('reminders').insert(newReminder).select().single();
       if (error) throw error;
+      await this.logActivity('reminder.create', {
+        entityType: 'reminder',
+        entityId: (data as Reminder).id,
+        metadata: { body: newReminder.body },
+      });
       return data as Reminder;
     }
     updateLocal('reminders', (items) => [newReminder, ...items]);
@@ -301,6 +359,11 @@ export const api = {
     if (isSupabaseConfigured) {
       const { data, error } = await db().from('reminders').update(updates).eq('id', id).select().single();
       if (error) throw error;
+      await this.logActivity('reminder.update', {
+        entityType: 'reminder',
+        entityId: id,
+        metadata: updates,
+      });
       return data as Reminder;
     }
     let updated!: Reminder;
@@ -320,6 +383,7 @@ export const api = {
     if (isSupabaseConfigured) {
       const { error } = await db().from('reminders').delete().eq('id', id);
       if (error) throw error;
+      await this.logActivity('reminder.delete', { entityType: 'reminder', entityId: id });
       return;
     }
     updateLocal('reminders', (items) => items.filter((r) => r.id !== id));
@@ -347,6 +411,11 @@ export const api = {
     if (isSupabaseConfigured) {
       const { data, error } = await db().from('visit_notes').insert(newNote).select().single();
       if (error) throw error;
+      await this.logActivity('visit_note.create', {
+        entityType: 'visit_note',
+        entityId: (data as VisitNote).id,
+        metadata: { visit_date: newNote.visit_date },
+      });
       return data as VisitNote;
     }
     updateLocal('visit_notes', (items) => [newNote, ...items]);
@@ -367,6 +436,11 @@ export const api = {
     if (isSupabaseConfigured) {
       const { data, error } = await db().from('documents').insert(newDoc).select().single();
       if (error) throw error;
+      await this.logActivity('document.create', {
+        entityType: 'document',
+        entityId: (data as Document).id,
+        metadata: { name: newDoc.name, folder: newDoc.folder },
+      });
       return data as Document;
     }
     updateLocal('documents', (items) => [newDoc, ...items]);
@@ -377,6 +451,7 @@ export const api = {
     if (isSupabaseConfigured) {
       const { error } = await db().from('documents').delete().eq('id', id);
       if (error) throw error;
+      await this.logActivity('document.delete', { entityType: 'document', entityId: id });
       return;
     }
     updateLocal('documents', (items) => items.filter((d) => d.id !== id));
@@ -399,6 +474,11 @@ export const api = {
     if (isSupabaseConfigured && !doc.storage_path.startsWith('local://')) {
       const { data, error } = await db().storage.from('documents').createSignedUrl(doc.storage_path, 3600);
       if (error) throw error;
+      await this.logActivity('document.view', {
+        entityType: 'document',
+        entityId: doc.id,
+        metadata: { name: doc.name },
+      });
       return data.signedUrl;
     }
     return localStorage.getItem(`doc:${doc.storage_path}`) ?? '#';
@@ -431,6 +511,10 @@ export const api = {
     if (isSupabaseConfigured) {
       const { data, error } = await db().from('family_updates').insert(update).select().single();
       if (error) throw error;
+      await this.logActivity('family_update.create', {
+        entityType: 'family_update',
+        entityId: (data as FamilyUpdate).id,
+      });
       return data as FamilyUpdate;
     }
     updateLocal('family_updates', (items) => [update, ...items]);
@@ -455,6 +539,11 @@ export const api = {
         .select()
         .single();
       if (error) throw error;
+      await this.logActivity('financial_account.update', {
+        entityType: 'financial_account',
+        entityId: id,
+        metadata: updates,
+      });
       return data as FinancialAccount;
     }
     let updated!: FinancialAccount;
@@ -474,6 +563,7 @@ export const api = {
     if (isSupabaseConfigured) {
       const { data, error } = await db().functions.invoke('plaid-balance', { body: { action: 'refresh' } });
       if (error) throw error;
+      await this.logActivity('financial.refresh_balance');
       return data?.account ?? null;
     }
     const accounts = getLocal('financial_accounts');
@@ -512,6 +602,7 @@ export const api = {
     if (isSupabaseConfigured) {
       const { error } = await db().from('transactions').insert(withIds);
       if (error) throw error;
+      await this.logActivity('transaction.import', { metadata: { count: withIds.length } });
       return withIds.length;
     }
 
@@ -520,11 +611,64 @@ export const api = {
   },
 
   async logFinancialAccess(profileId: string | null, action: string): Promise<void> {
+    await this.logActivity('financial.access', { metadata: { detail: action } });
     if (isSupabaseConfigured) {
       await db().from('financial_access_log').insert({ profile_id: profileId, action });
       return;
     }
-    // no-op in local mode
+  },
+
+  async logActivity(
+    action: string,
+    opts?: { entityType?: string; entityId?: string; metadata?: Record<string, unknown> }
+  ): Promise<void> {
+    const entry: ActivityLog = {
+      id: crypto.randomUUID(),
+      profile_id: activityContext.profileId,
+      persona: activityContext.persona,
+      action,
+      entity_type: opts?.entityType ?? null,
+      entity_id: opts?.entityId ?? null,
+      metadata: opts?.metadata ?? {},
+      created_at: new Date().toISOString(),
+    };
+
+    if (isSupabaseConfigured) {
+      try {
+        await db().rpc('log_activity', {
+          p_profile_id: entry.profile_id,
+          p_persona: entry.persona,
+          p_action: entry.action,
+          p_entity_type: entry.entity_type,
+          p_entity_id: entry.entity_id,
+          p_metadata: entry.metadata,
+        });
+      } catch {
+        // Don't block user actions if logging fails
+      }
+      return;
+    }
+
+    updateLocal('activity_log', (items) => [entry, ...items].slice(0, 500));
+  },
+
+  async getActivityLogs(limit = 200): Promise<ActivityLog[]> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await db()
+        .from('activity_log')
+        .select('*, profile:profiles(*)')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return (data ?? []) as ActivityLog[];
+    }
+
+    const logs = getLocal('activity_log');
+    const profiles = getLocal('profiles');
+    return logs.slice(0, limit).map((log) => ({
+      ...log,
+      profile: log.profile_id ? profiles.find((p) => p.id === log.profile_id) : undefined,
+    }));
   },
 };
 

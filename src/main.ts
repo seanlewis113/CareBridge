@@ -5,7 +5,8 @@ import './styles/mother.css';
 import './styles/admin.css';
 
 import { initRouter, registerRoute, navigate, getCurrentRoute } from './shared/router';
-import { isAdmin, isCaregiver, isMother } from './shared/auth';
+import { isAdmin, isCaregiver, isMother, handleAuthSignedOut } from './shared/auth';
+import { isSupabaseConfigured, getSupabase } from './shared/supabase';
 import { renderLanding, renderModuleSelect } from './personas/landing';
 import { renderMotherHub } from './personas/mother/hub';
 import { renderAdminDashboard } from './personas/admin/dashboard';
@@ -17,6 +18,7 @@ import { renderAdminDocuments } from './personas/admin/documents';
 import { renderAdminVisits } from './personas/admin/visits';
 import { renderAdminSettings } from './personas/admin/settings';
 import { renderAdminUsers } from './personas/admin/users';
+import { renderAdminActivity } from './personas/admin/activity';
 import { renderCaregiverToday } from './personas/caregiver/today';
 import { renderCaregiverCalendar } from './personas/caregiver/calendar';
 import { renderCaregiverTasks } from './personas/caregiver/tasks';
@@ -101,6 +103,11 @@ function registerRoutes(): void {
     await renderAdminUsers();
   });
 
+  registerRoute('/admin/activity', async () => {
+    if (!(await guardAdmin())) return;
+    await renderAdminActivity();
+  });
+
   registerRoute('/admin/settings', async () => {
     if (!(await guardAdmin())) return;
     await renderAdminSettings();
@@ -146,6 +153,7 @@ function registerRoutes(): void {
           await getSupabase().functions.invoke('google-calendar-sync', {
             body: { action: 'oauth', code, redirect_uri: `${window.location.origin}/google-callback` },
           });
+          await api.logActivity('calendar.oauth_connect');
         }
       } catch {
         console.warn('Google OAuth callback — configure Supabase edge function to complete setup.');
@@ -156,9 +164,24 @@ function registerRoutes(): void {
   });
 }
 
+function initAuthListener(): void {
+  if (!isSupabaseConfigured) return;
+
+  getSupabase().auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') {
+      handleAuthSignedOut();
+      if (getCurrentRoute() !== '/') {
+        navigate('/');
+      }
+    }
+  });
+}
+
 async function init(): Promise<void> {
   const app = document.getElementById('app');
   if (!app) return;
+
+  initAuthListener();
 
   if (!import.meta.env.PROD && 'serviceWorker' in navigator) {
     const registrations = await navigator.serviceWorker.getRegistrations();

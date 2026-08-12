@@ -37,50 +37,94 @@ function renderSidebar(
     nav.append(a);
   }
 
-  const switchBtn = el('button', { className: 'btn btn-ghost', type: 'button' },
-    icon('log-out'),
-    isAdminShell ? 'Switch Persona' : 'Sign out'
-  );
-  switchBtn.addEventListener('click', () => {
-    if (isAdminShell && isAdminProfile()) {
+  const footer = el('div', { className: 'app-sidebar-footer' });
+
+  if (isAdminShell && isAdminProfile()) {
+    const switchBtn = el('button', { className: 'btn btn-ghost', type: 'button' },
+      icon('users'),
+      'Switch Persona'
+    );
+    switchBtn.addEventListener('click', () => {
       clearActivePersona();
       navigate(MODULE_SELECT_PATH);
-    } else {
-      signOut();
-      navigate('/');
-    }
-  });
+    });
 
-  const footer = el('div', { className: 'app-sidebar-footer' }, switchBtn);
+    const signOutBtn = el('button', { className: 'btn btn-ghost', type: 'button' },
+      icon('log-out'),
+      'Sign out'
+    );
+    signOutBtn.addEventListener('click', async () => {
+      await signOut();
+      navigate('/');
+    });
+
+    footer.append(switchBtn, signOutBtn);
+  } else {
+    const signOutBtn = el('button', { className: 'btn btn-ghost', type: 'button' },
+      icon('log-out'),
+      'Sign out'
+    );
+    signOutBtn.addEventListener('click', async () => {
+      await signOut();
+      navigate('/');
+    });
+    footer.append(signOutBtn);
+  }
 
   sidebar.append(brand, nav, footer);
   return sidebar;
 }
 
 function renderMobileHeader(title: string, isAdminShell = false): HTMLElement {
-  const switchBtn = el('button', {
-    className: 'btn btn-ghost btn-icon',
-    type: 'button',
-    'aria-label': isAdminShell ? 'Switch persona' : 'Sign out',
-  },
-    icon('log-out')
-  );
-  switchBtn.addEventListener('click', () => {
-    if (isAdminShell && isAdminProfile()) {
+  const actions = el('div', { className: 'app-header-actions' });
+
+  if (isAdminShell && isAdminProfile()) {
+    const switchBtn = el('button', {
+      className: 'btn btn-ghost btn-icon',
+      type: 'button',
+      'aria-label': 'Switch persona',
+    },
+      icon('users')
+    );
+    switchBtn.addEventListener('click', () => {
       clearActivePersona();
       navigate(MODULE_SELECT_PATH);
-    } else {
-      signOut();
+    });
+
+    const signOutBtn = el('button', {
+      className: 'btn btn-ghost btn-icon',
+      type: 'button',
+      'aria-label': 'Sign out',
+    },
+      icon('log-out')
+    );
+    signOutBtn.addEventListener('click', async () => {
+      await signOut();
       navigate('/');
-    }
-  });
+    });
+
+    actions.append(switchBtn, signOutBtn);
+  } else {
+    const signOutBtn = el('button', {
+      className: 'btn btn-ghost btn-icon',
+      type: 'button',
+      'aria-label': 'Sign out',
+    },
+      icon('log-out')
+    );
+    signOutBtn.addEventListener('click', async () => {
+      await signOut();
+      navigate('/');
+    });
+    actions.append(signOutBtn);
+  }
 
   return el('header', { className: 'app-header' },
     el('h1', {},
       el('span', { className: 'app-header-logo' }, icon('heart')),
       title
     ),
-    el('div', { className: 'app-header-actions' }, switchBtn)
+    actions
   );
 }
 
@@ -147,6 +191,7 @@ export function renderAdminShell(content: HTMLElement, activePath: string): void
     { path: '/admin/visits', label: 'Visit Notes', icon: 'file-text' },
     { path: '/admin/documents', label: 'Documents', icon: 'folder' },
     { path: '/admin/users', label: 'Users', icon: 'users' },
+    { path: '/admin/activity', label: 'Activity Log', icon: 'activity' },
     { path: '/admin/finance', label: 'Financials', icon: 'dollar-sign' },
     { path: '/admin/settings', label: 'Settings', icon: 'settings' },
   ];

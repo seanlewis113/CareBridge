@@ -1,5 +1,5 @@
 import type { Persona, Profile, SessionState } from './types';
-import { api } from './api';
+import { api, setActivityContext } from './api';
 import { hashPin, verifyPin } from './utils';
 import { isSupabaseConfigured, getSupabase } from './supabase';
 
@@ -10,6 +10,14 @@ type SessionListener = (session: SessionState) => void;
 
 let session: SessionState = loadSession();
 const listeners = new Set<SessionListener>();
+syncActivityContext();
+
+function syncActivityContext(): void {
+  setActivityContext({
+    profileId: session.profile?.id ?? null,
+    persona: session.persona,
+  });
+}
 
 function setSessionFromProfile(profile: Profile | null): void {
   session = {
@@ -19,6 +27,7 @@ function setSessionFromProfile(profile: Profile | null): void {
     financialUnlockedUntil: null,
   };
   saveSession();
+  syncActivityContext();
 }
 
 function loadSession(): SessionState {
@@ -58,6 +67,7 @@ export async function signInWithEmail(email: string, password: string): Promise<
     if (profileError || !profileData) return null;
     const profile = profileData as Profile;
     setSessionFromProfile(profile);
+    await api.logActivity('auth.sign_in', { metadata: { email: profile.email } });
     return profile;
   }
 
@@ -119,6 +129,9 @@ export async function inviteUserByAdmin(
     },
   });
   if (error) throw error;
+  await api.logActivity('auth.invite_user', {
+    metadata: { email: email.trim().toLowerCase(), display_name: displayName.trim(), persona },
+  });
 }
 
 export async function hasSupabaseAuth(): Promise<boolean> {
@@ -156,6 +169,8 @@ export async function signInAsPersona(persona: Persona, pin?: string): Promise<b
       financialUnlockedUntil: null,
     };
     saveSession();
+    syncActivityContext();
+    await api.logActivity('auth.persona_switch', { metadata: { persona: 'mother' } });
     return true;
   }
 
@@ -174,6 +189,8 @@ export async function signInAsPersona(persona: Persona, pin?: string): Promise<b
       financialUnlockedUntil: null,
     };
     saveSession();
+    syncActivityContext();
+    await api.logActivity('auth.persona_switch', { metadata: { persona: 'admin' } });
     return true;
   }
 
@@ -187,6 +204,8 @@ export async function signInAsPersona(persona: Persona, pin?: string): Promise<b
     financialUnlockedUntil: null,
   };
   saveSession();
+  syncActivityContext();
+  await api.logActivity('auth.persona_switch', { metadata: { persona } });
   return true;
 }
 
@@ -199,6 +218,7 @@ export function restorePersonaFromProfile(): boolean {
     financialUnlockedUntil: null,
   };
   saveSession();
+  syncActivityContext();
   return true;
 }
 
@@ -210,6 +230,7 @@ export function clearActivePersona(): void {
     financialUnlockedUntil: null,
   };
   saveSession();
+  syncActivityContext();
 }
 
 export function isAuthenticated(): boolean {
@@ -220,12 +241,25 @@ export function isAdminProfile(): boolean {
   return session.profile?.persona === 'admin';
 }
 
-export function signOut(): void {
-  if (isSupabaseConfigured) {
-    getSupabase().auth.signOut();
-  }
+function clearSession(): void {
   session = { persona: null, profile: null, motherDeviceMode: false, financialUnlockedUntil: null };
   saveSession();
+  syncActivityContext();
+}
+
+export function handleAuthSignedOut(): void {
+  clearSession();
+}
+
+export async function signOut(): Promise<void> {
+  const profileId = session.profile?.id ?? null;
+  if (profileId) {
+    await api.logActivity('auth.sign_out', { metadata: { profile_id: profileId } });
+  }
+  if (isSupabaseConfigured) {
+    await getSupabase().auth.signOut();
+  }
+  clearSession();
 }
 
 export async function setMotherPin(pin: string): Promise<void> {
@@ -250,6 +284,7 @@ export async function unlockFinancials(pin: string): Promise<boolean> {
   session.financialUnlockedUntil = Date.now() + FINANCIAL_TIMEOUT_MS;
   saveSession();
   await api.logFinancialAccess(session.profile?.id ?? null, 'unlock');
+  await api.logActivity('auth.financial_unlock');
   return true;
 }
 
@@ -266,6 +301,7 @@ export function isFinancialUnlocked(): boolean {
 export function lockFinancials(): void {
   session.financialUnlockedUntil = null;
   saveSession();
+  void api.logActivity('auth.financial_lock');
 }
 
 export function canAccessFinancials(): boolean {
