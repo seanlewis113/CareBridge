@@ -1,7 +1,7 @@
 import { api } from '../../shared/api';
 import { clearActivePersona } from '../../shared/auth';
 import { navigate, MODULE_SELECT_PATH } from '../../shared/router';
-import { el, greeting, formatDate, formatTime, formatCurrency, showModal, verifyPin, timeOfDayClass, showToast } from '../../shared/utils';
+import { el, greeting, formatDate, formatTime, formatCurrency, showModal, timeOfDayClass, showToast } from '../../shared/utils';
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm } from './add-event';
 import type { CalendarEvent } from '../../shared/types';
@@ -710,60 +710,6 @@ function getTaskHelperLabel(
 }
 
 function showSwitchUserDialog(): void {
-  const form = el('form', { className: 'pin-form modal-body' });
-  let currentPin = '';
-
-  form.append(
-    el('p', { style: 'text-align:center;color:var(--color-text-muted)' },
-      'Enter the family PIN to switch to a different user.'
-    )
-  );
-
-  const digits = el('div', { className: 'pin-digits' });
-  const inputs: HTMLInputElement[] = [];
-  for (let i = 0; i < 4; i++) {
-    const input = el('input', {
-      type: 'password',
-      className: 'pin-digit',
-      inputmode: 'numeric',
-      maxlength: '1',
-      autocomplete: 'off',
-      'aria-label': `PIN digit ${i + 1}`,
-    }) as HTMLInputElement;
-    input.addEventListener('input', () => {
-      input.value = input.value.replace(/\D/g, '').slice(0, 1);
-      if (input.value && i < 3) inputs[i + 1].focus();
-      currentPin = inputs.map((inp) => inp.value).join('');
-    });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && !input.value && i > 0) inputs[i - 1].focus();
-    });
-    inputs.push(input);
-    digits.append(input);
-  }
-  form.append(digits);
-
-  form.append(
-    el('p', { id: 'switch-error', style: 'color:var(--color-danger);display:none;text-align:center' }),
-    el('button', { className: 'btn btn-primary btn-block', type: 'submit' }, 'Switch User')
-  );
-
-  const close = showModal('Family Login', form);
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const settings = await api.getSettings();
-    const valid = await verifyPin(currentPin, settings.admin_switch_pin_hash);
-    if (valid) {
-      clearActivePersona();
-      close();
-      await navigate(MODULE_SELECT_PATH);
-    } else {
-      const err = form.querySelector('#switch-error') as HTMLElement;
-      err.textContent = 'Incorrect PIN. Default is 1234 if not set.';
-      err.style.display = 'block';
-    }
-  });
-
-  setTimeout(() => inputs[0]?.focus(), 100);
+  clearActivePersona();
+  void navigate(MODULE_SELECT_PATH);
 }

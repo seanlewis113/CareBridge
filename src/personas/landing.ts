@@ -12,15 +12,15 @@ import {
   restorePersonaFromProfile,
 } from '../shared/auth';
 import { navigate, personaHome, MODULE_SELECT_PATH } from '../shared/router';
-import { el, showModal } from '../shared/utils';
+import { el } from '../shared/utils';
 import { icon } from '../shared/icons';
 import { isSupabaseConfigured } from '../shared/supabase';
 
-const PERSONA_CONFIG: { persona: Persona; iconName: 'home' | 'settings' | 'users' | 'briefcase'; desc: string; needsPin: boolean }[] = [
-  { persona: 'mother', iconName: 'home', desc: 'Your daily hub', needsPin: true },
-  { persona: 'admin', iconName: 'settings', desc: 'Coordinate everything', needsPin: true },
-  { persona: 'family_caregiver', iconName: 'users', desc: 'Family visits & tasks', needsPin: true },
-  { persona: 'hired_caregiver', iconName: 'briefcase', desc: 'Visit tasks & notes', needsPin: true },
+const PERSONA_CONFIG: { persona: Persona; iconName: 'home' | 'settings' | 'users' | 'briefcase'; desc: string }[] = [
+  { persona: 'mother', iconName: 'home', desc: 'Your daily hub' },
+  { persona: 'admin', iconName: 'settings', desc: 'Coordinate everything' },
+  { persona: 'family_caregiver', iconName: 'users', desc: 'Family visits & tasks' },
+  { persona: 'hired_caregiver', iconName: 'briefcase', desc: 'Visit tasks & notes' },
 ];
 
 export async function renderLanding(): Promise<void> {
@@ -81,15 +81,15 @@ export async function renderLanding(): Promise<void> {
     icon('home'),
     "Mom's tablet"
   );
-  momTabletBtn.addEventListener('click', () => showPersonaLogin('mother', true));
+  momTabletBtn.addEventListener('click', () => switchToPersona('mother'));
   altAccess.append(momTabletBtn);
 
-  const pinAccessBtn = el('button', { className: 'btn btn-ghost btn-block', type: 'button' },
+  const personaAccessBtn = el('button', { className: 'btn btn-ghost btn-block', type: 'button' },
     icon('users'),
-    'Enter with family PIN'
+    'Choose persona'
   );
-  pinAccessBtn.addEventListener('click', () => navigate(MODULE_SELECT_PATH));
-  altAccess.append(pinAccessBtn);
+  personaAccessBtn.addEventListener('click', () => navigate(MODULE_SELECT_PATH));
+  altAccess.append(personaAccessBtn);
 
   footer.append(altAccess);
   container.append(hero, loginCard, footer);
@@ -135,7 +135,7 @@ export async function renderModuleSelect(): Promise<void> {
       el('span', { className: 'persona-btn-desc' }, config.desc)
     );
 
-    btn.addEventListener('click', () => showPersonaLogin(config.persona, config.needsPin));
+    btn.addEventListener('click', () => switchToPersona(config.persona));
     grid.append(btn);
   }
 
@@ -311,88 +311,13 @@ function createEmailSignupForm(): HTMLElement {
   return form;
 }
 
-function createPinDigits(container: HTMLElement, onComplete: (pin: string) => void): void {
-  const digits = el('div', { className: 'pin-digits' });
-  const inputs: HTMLInputElement[] = [];
-
-  for (let i = 0; i < 4; i++) {
-    const input = el('input', {
-      type: 'password',
-      className: 'pin-digit',
-      inputmode: 'numeric',
-      pattern: '[0-9]*',
-      maxlength: '1',
-      autocomplete: 'off',
-      'aria-label': `PIN digit ${i + 1}`,
-    }) as HTMLInputElement;
-
-    input.addEventListener('input', () => {
-      input.value = input.value.replace(/\D/g, '').slice(0, 1);
-      if (input.value && i < 3) inputs[i + 1].focus();
-      const pin = inputs.map((inp) => inp.value).join('');
-      if (pin.length === 4) onComplete(pin);
-    });
-
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && !input.value && i > 0) {
-        inputs[i - 1].focus();
-      }
-    });
-
-    inputs.push(input);
-    digits.append(input);
-  }
-
-  container.append(digits);
-  setTimeout(() => inputs[0].focus(), 100);
-}
-
-function showPersonaLogin(persona: Persona, needsPin: boolean): void {
-  const form = el('form', { className: 'pin-form modal-body' });
-  const title = PERSONA_LABELS[persona];
-  let currentPin = '';
-
-  if (needsPin) {
-    form.append(
-      el('p', { style: 'text-align:center;color:var(--color-text-muted)' },
-        persona === 'mother'
-          ? 'Enter the PIN for Mom\'s tablet'
-          : 'Enter the family PIN to continue'
-      )
-    );
-    createPinDigits(form, (pin) => { currentPin = pin; });
-    const hiddenPin = el('input', { type: 'hidden', id: 'pin', name: 'pin' });
-    form.append(hiddenPin);
-  }
-
-  const errorEl = el('p', { className: 'error-msg', style: 'color:var(--color-danger);display:none;text-align:center' });
-  const actions = el('div', { className: 'modal-actions' },
-    el('button', { className: 'btn btn-secondary', type: 'button', id: 'cancel-pin' }, 'Cancel'),
-    el('button', { className: 'btn btn-primary', type: 'submit' }, `Continue as ${title}`)
-  );
-  form.append(errorEl, actions);
-
-  const close = showModal(`Sign in as ${title}`, form);
-
-  form.querySelector('#cancel-pin')?.addEventListener('click', close);
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const pinInput = form.querySelector('#pin') as HTMLInputElement | null;
-    const pin = currentPin || pinInput?.value || '';
-    try {
-      const ok = await signInAsPersona(persona, pin);
-      if (ok) {
-        close();
-        await navigate(personaHome(persona));
-      } else {
-        errorEl.textContent = 'Incorrect PIN. Try again.';
-        errorEl.style.display = 'block';
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Sign-in failed. Please try email access below.';
-      errorEl.textContent = message;
-      errorEl.style.display = 'block';
+async function switchToPersona(persona: Persona): Promise<void> {
+  try {
+    const ok = await signInAsPersona(persona);
+    if (ok) {
+      await navigate(personaHome(persona));
     }
-  });
+  } catch (err) {
+    console.error('Persona switch failed:', err);
+  }
 }

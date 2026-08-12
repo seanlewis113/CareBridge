@@ -68,7 +68,6 @@ function formatDetails(log: ActivityLog): string | null {
 }
 
 export async function renderAdminActivity(): Promise<void> {
-  const logs = await api.getActivityLogs();
   const content = el('div', {});
 
   content.append(
@@ -78,18 +77,31 @@ export async function renderAdminActivity(): Promise<void> {
     )
   );
 
-  if (logs.length === 0) {
-    content.append(emptyState(
-      icon('activity'),
-      'No activity yet',
-      'Actions taken by users will appear here.'
-    ));
-  } else {
-    const list = el('div', { className: 'activity-log-list' });
-    for (const log of logs) {
-      list.append(renderActivityEntry(log));
+  try {
+    const logs = await api.getActivityLogs();
+
+    if (logs.length === 0) {
+      content.append(emptyState(
+        icon('activity'),
+        'No activity yet',
+        'Actions taken by users will appear here.'
+      ));
+    } else {
+      const list = el('div', { className: 'activity-log-list' });
+      for (const log of logs) {
+        list.append(renderActivityEntry(log));
+      }
+      content.append(list);
     }
-    content.append(list);
+  } catch (err) {
+    console.error('Failed to load activity log:', err);
+    content.append(
+      el('div', { className: 'card', style: 'border-color:var(--color-warning,#d97706)' },
+        el('p', { style: 'margin:0;font-size:0.95rem' },
+          'Could not load the activity log. Run the latest Supabase migrations (activity_log table) and refresh.'
+        )
+      )
+    );
   }
 
   renderAdminShell(content, '/admin/activity');

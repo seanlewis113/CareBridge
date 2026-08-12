@@ -656,11 +656,30 @@ export const api = {
     if (isSupabaseConfigured) {
       const { data, error } = await db()
         .from('activity_log')
-        .select('*, profile:profiles(*)')
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(limit);
       if (error) throw error;
-      return (data ?? []) as ActivityLog[];
+
+      const logs = (data ?? []) as ActivityLog[];
+      const profileIds = [...new Set(
+        logs.map((log) => log.profile_id).filter((id): id is string => Boolean(id))
+      )];
+
+      let profiles: Profile[] = [];
+      if (profileIds.length > 0) {
+        const { data: profileData, error: profileError } = await db()
+          .from('profiles')
+          .select('*')
+          .in('id', profileIds);
+        if (profileError) throw profileError;
+        profiles = (profileData ?? []) as Profile[];
+      }
+
+      return logs.map((log) => ({
+        ...log,
+        profile: log.profile_id ? profiles.find((p) => p.id === log.profile_id) : undefined,
+      }));
     }
 
     const logs = getLocal('activity_log');

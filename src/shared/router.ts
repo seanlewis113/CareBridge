@@ -48,7 +48,16 @@ export async function navigate(path: string): Promise<void> {
 
   if (handler) {
     appRoot.replaceChildren();
-    await handler();
+    try {
+      await handler();
+    } catch (err) {
+      console.error(`Route error (${path}):`, err);
+      const message = document.createElement('div');
+      message.className = 'card';
+      message.style.cssText = 'padding:2rem;margin:2rem;max-width:32rem';
+      message.innerHTML = '<h2>Something went wrong</h2><p>Please refresh the page or go back.</p>';
+      appRoot.append(message);
+    }
   }
 }
 

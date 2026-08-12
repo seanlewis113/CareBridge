@@ -127,7 +127,6 @@ export interface SessionState {
   persona: Persona | null;
   profile: Profile | null;
   motherDeviceMode: boolean;
-  financialUnlockedUntil: number | null;
 }
 
 export interface ActivityLog {

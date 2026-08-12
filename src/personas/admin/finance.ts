@@ -1,5 +1,5 @@
 import { api } from '../../shared/api';
-import { canAccessFinancials, unlockFinancials, lockFinancials, getSession } from '../../shared/auth';
+import { getSession } from '../../shared/auth';
 import { renderAdminShell } from '../shared/shell';
 import { el, formatCurrency, formatDate, showModal } from '../../shared/utils';
 import * as XLSX from 'xlsx';
@@ -7,18 +7,6 @@ import type { FinancialAccount, Transaction } from '../../shared/types';
 
 export async function renderAdminFinance(): Promise<void> {
   const content = el('div', {});
-
-  if (!canAccessFinancials()) {
-    content.append(
-      el('div', { className: 'finance-locked card' },
-        el('h2', {}, 'Financials'),
-        el('p', {}, 'Enter your financial PIN to view accounts and spending.'),
-        renderPinForm(async () => renderAdminFinance())
-      )
-    );
-    renderAdminShell(content, '/admin/finance');
-    return;
-  }
 
   const session = getSession();
   const [accounts, transactions] = await Promise.all([
@@ -31,8 +19,7 @@ export async function renderAdminFinance(): Promise<void> {
       el('h2', {}, 'Financials'),
       el('div', { style: 'display:flex;gap:0.5rem' },
         el('button', { className: 'btn btn-secondary', type: 'button', id: 'refresh-chime' }, 'Refresh Chime'),
-        el('button', { className: 'btn btn-secondary', type: 'button', id: 'import-tx' }, 'Import Transactions'),
-        el('button', { className: 'btn btn-secondary', type: 'button', id: 'lock-finance' }, 'Lock')
+        el('button', { className: 'btn btn-secondary', type: 'button', id: 'import-tx' }, 'Import Transactions')
       )
     )
   );
@@ -81,11 +68,6 @@ export async function renderAdminFinance(): Promise<void> {
 
   renderAdminShell(content, '/admin/finance');
 
-  document.getElementById('lock-finance')?.addEventListener('click', () => {
-    lockFinancials();
-    renderAdminFinance();
-  });
-
   document.getElementById('refresh-chime')?.addEventListener('click', async () => {
     try {
       await api.refreshChimeBalance();
@@ -102,32 +84,6 @@ export async function renderAdminFinance(): Promise<void> {
     });
     const close = showModal('Import Transactions', form);
   });
-}
-
-function renderPinForm(onSuccess: () => void): HTMLElement {
-  const form = el('form', { style: 'max-width:280px;margin:1rem auto' });
-  form.append(
-    el('div', { className: 'form-group' },
-      el('label', { for: 'fin-pin' }, 'Financial PIN'),
-      el('input', { type: 'password', id: 'fin-pin', className: 'pin-input', inputmode: 'numeric', required: 'true' })
-    ),
-    el('p', { id: 'fin-pin-error', style: 'color:var(--color-danger);display:none' }),
-    el('button', { className: 'btn btn-primary btn-block', type: 'submit' }, 'Unlock')
-  );
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const pin = (form.querySelector('#fin-pin') as HTMLInputElement).value;
-    const ok = await unlockFinancials(pin);
-    if (ok) onSuccess();
-    else {
-      const err = form.querySelector('#fin-pin-error') as HTMLElement;
-      err.textContent = 'Incorrect PIN';
-      err.style.display = 'block';
-    }
-  });
-
-  return form;
 }
 
 function renderCategoryChart(transactions: Transaction[]): HTMLElement {

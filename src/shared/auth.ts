@@ -1,10 +1,8 @@
 import type { Persona, Profile, SessionState } from './types';
 import { api, setActivityContext } from './api';
-import { hashPin, verifyPin } from './utils';
 import { isSupabaseConfigured, getSupabase } from './supabase';
 
 const SESSION_KEY = 'moms-care-session';
-const FINANCIAL_TIMEOUT_MS = 15 * 60 * 1000;
 
 type SessionListener = (session: SessionState) => void;
 
@@ -24,7 +22,6 @@ function setSessionFromProfile(profile: Profile | null): void {
     persona: profile?.persona ?? null,
     profile,
     motherDeviceMode: false,
-    financialUnlockedUntil: null,
   };
   saveSession();
   syncActivityContext();
@@ -37,7 +34,7 @@ function loadSession(): SessionState {
   } catch {
     // fall through
   }
-  return { persona: null, profile: null, motherDeviceMode: false, financialUnlockedUntil: null };
+  return { persona: null, profile: null, motherDeviceMode: false };
 }
 
 function saveSession(): void {
@@ -157,27 +154,18 @@ export async function refreshSessionFromSupabase(): Promise<Profile | null> {
   return profile;
 }
 
-export async function signInAsPersona(persona: Persona, pin?: string): Promise<boolean> {
+export async function signInAsPersona(persona: Persona): Promise<boolean> {
   if (persona === 'mother') {
-    const settings = await api.getSettings();
-    const valid = await verifyPin(pin ?? '', settings.mother_pin_hash);
-    if (!valid) return false;
     session = {
       persona: 'mother',
       profile: null,
       motherDeviceMode: true,
-      financialUnlockedUntil: null,
     };
     saveSession();
     syncActivityContext();
     await api.logActivity('auth.persona_switch', { metadata: { persona: 'mother' } });
     return true;
   }
-
-  if (!pin) return false;
-  const settings = await api.getSettings();
-  const valid = await verifyPin(pin, settings.admin_switch_pin_hash);
-  if (!valid) return false;
 
   if (persona === 'admin') {
     const profiles = await api.getProfiles();
@@ -186,7 +174,6 @@ export async function signInAsPersona(persona: Persona, pin?: string): Promise<b
       persona: 'admin',
       profile: admin ?? null,
       motherDeviceMode: false,
-      financialUnlockedUntil: null,
     };
     saveSession();
     syncActivityContext();
@@ -201,7 +188,6 @@ export async function signInAsPersona(persona: Persona, pin?: string): Promise<b
     persona,
     profile,
     motherDeviceMode: false,
-    financialUnlockedUntil: null,
   };
   saveSession();
   syncActivityContext();
@@ -215,7 +201,6 @@ export function restorePersonaFromProfile(): boolean {
     ...session,
     persona: session.profile.persona,
     motherDeviceMode: false,
-    financialUnlockedUntil: null,
   };
   saveSession();
   syncActivityContext();
@@ -227,7 +212,6 @@ export function clearActivePersona(): void {
     ...session,
     persona: null,
     motherDeviceMode: false,
-    financialUnlockedUntil: null,
   };
   saveSession();
   syncActivityContext();
@@ -242,7 +226,7 @@ export function isAdminProfile(): boolean {
 }
 
 function clearSession(): void {
-  session = { persona: null, profile: null, motherDeviceMode: false, financialUnlockedUntil: null };
+  session = { persona: null, profile: null, motherDeviceMode: false };
   saveSession();
   syncActivityContext();
 }
@@ -262,50 +246,8 @@ export async function signOut(): Promise<void> {
   clearSession();
 }
 
-export async function setMotherPin(pin: string): Promise<void> {
-  const hash = await hashPin(pin);
-  await api.updateSettings({ mother_pin_hash: hash });
-}
-
-export async function setAdminSwitchPin(pin: string): Promise<void> {
-  const hash = await hashPin(pin);
-  await api.updateSettings({ admin_switch_pin_hash: hash });
-}
-
-export async function setFinancialPin(pin: string): Promise<void> {
-  const hash = await hashPin(pin);
-  await api.updateSettings({ financial_pin_hash: hash });
-}
-
-export async function unlockFinancials(pin: string): Promise<boolean> {
-  const settings = await api.getSettings();
-  const valid = await verifyPin(pin, settings.financial_pin_hash);
-  if (!valid) return false;
-  session.financialUnlockedUntil = Date.now() + FINANCIAL_TIMEOUT_MS;
-  saveSession();
-  await api.logFinancialAccess(session.profile?.id ?? null, 'unlock');
-  await api.logActivity('auth.financial_unlock');
-  return true;
-}
-
-export function isFinancialUnlocked(): boolean {
-  if (!session.financialUnlockedUntil) return false;
-  if (Date.now() > session.financialUnlockedUntil) {
-    session.financialUnlockedUntil = null;
-    saveSession();
-    return false;
-  }
-  return true;
-}
-
-export function lockFinancials(): void {
-  session.financialUnlockedUntil = null;
-  saveSession();
-  void api.logActivity('auth.financial_lock');
-}
-
 export function canAccessFinancials(): boolean {
-  return session.persona === 'admin' && isFinancialUnlocked();
+  return session.persona === 'admin';
 }
 
 export function isAdmin(): boolean {
