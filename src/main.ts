@@ -1,6 +1,7 @@
 import './styles/global.css';
 import './styles/clock-picker.css';
 import './styles/landing.css';
+import './styles/calendar.css';
 import './styles/mother.css';
 import './styles/admin.css';
 

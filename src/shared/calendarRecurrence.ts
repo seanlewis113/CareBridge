@@ -11,6 +11,12 @@ export interface EventRecurrenceRule {
 const RECURRENCE_PREFIX = '[[MC_RECURRENCE]]';
 const DEFAULT_RECURRENCE_MONTHS = 18;
 
+export function getEventPlainDescription(event: CalendarEvent): string {
+  const description = event.description ?? '';
+  if (!description.startsWith(RECURRENCE_PREFIX)) return description.trim();
+  return description.split('\n').slice(1).join('\n').trim();
+}
+
 export function buildRecurringDescription(description: string | null, rule: EventRecurrenceRule | null): string | null {
   const plainDescription = (description ?? '').trim();
   if (!rule) return plainDescription || null;

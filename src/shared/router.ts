@@ -12,8 +12,11 @@ let navigationToken = 0;
 export function initRouter(root: HTMLElement, navigateCallback?: (path: string) => void): void {
   appRoot = root;
   onNavigate = navigateCallback ?? null;
-  window.addEventListener('popstate', () => navigate(getPathFromHash()));
-  navigate(getPathFromHash());
+  window.addEventListener('popstate', () => {
+    const path = getPathFromHash();
+    if (path === currentRoute) return;
+    void navigate(path);
+  });
 }
 
 export function registerRoute(path: string, handler: RouteHandler): void {

@@ -1,12 +1,21 @@
 import { api } from '../../shared/api';
 import { clearActivePersona, isAuthenticated } from '../../shared/auth';
 import { navigate, MODULE_SELECT_PATH } from '../../shared/router';
+import {
+  getCalendarViewMode,
+  groupEventsByDay,
+  renderCalendarGridView,
+  renderCalendarListView,
+  renderCalendarViewToggle,
+  type CalendarViewMode,
+} from '../../shared/calendarViews';
 import { el, greeting, formatDate, formatTime, formatCurrency, showModal, timeOfDayClass, showToast } from '../../shared/utils';
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm } from './add-event';
 import type { CalendarEvent } from '../../shared/types';
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
+let idleCleanup: (() => void) | null = null;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const CARD_IMAGE_STORAGE_KEY = 'moms-care-mother-card-images';
 const CARD_PREVIEW_WIDTH = 600;
@@ -100,7 +109,9 @@ export async function renderMotherHub(): Promise<void> {
           ),
           el('p', { className: 'mother-balance-meta' },
             chimeAccount?.last_synced
-              ? `Updated ${formatDate(chimeAccount.last_synced)}`
+              ? chimeAccount.plaid_item_id
+                ? `Updated ${formatDate(chimeAccount.last_synced)}`
+                : `Updated ${formatDate(chimeAccount.last_synced)} · manual`
               : 'Not synced'
           )
         ),
@@ -242,9 +253,23 @@ export async function renderMotherHub(): Promise<void> {
 
   document.getElementById('switch-user-btn')?.addEventListener('click', () => showSwitchUserDialog());
 
+  setupIdleTimer();
+}
+
+function setupIdleTimer(): void {
+  idleCleanup?.();
   resetIdleTimer();
-  document.addEventListener('mousemove', resetIdleTimer);
-  document.addEventListener('touchstart', resetIdleTimer);
+  const onActivity = () => resetIdleTimer();
+  document.addEventListener('mousemove', onActivity);
+  document.addEventListener('touchstart', onActivity);
+  idleCleanup = () => {
+    document.removeEventListener('mousemove', onActivity);
+    document.removeEventListener('touchstart', onActivity);
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+  };
 }
 
 function createTileHeader(iconName: IconName, title: string): HTMLElement {
@@ -558,133 +583,43 @@ function resetIdleTimer(): void {
   idleTimer = setTimeout(() => renderMotherHub(), IDLE_TIMEOUT_MS);
 }
 
-function groupEventsByDay(events: { start_at: string; title: string }[]): [string, typeof events][] {
-  const map = new Map<string, typeof events>();
-  for (const event of events) {
-    const day = event.start_at.slice(0, 10);
-    if (!map.has(day)) map.set(day, []);
-    map.get(day)!.push(event);
-  }
-  return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-}
-
-function scrollCalendarToToday(container: HTMLElement): void {
-  const todayCell = container.querySelector('.mother-calendar-day--today');
-  todayCell?.scrollIntoView({ block: 'center', inline: 'nearest' });
-}
-
 function showAllEventsCalendarModal(events: CalendarEvent[]): void {
-  const now = new Date();
+  let viewMode: CalendarViewMode = getCalendarViewMode();
   const body = el('div', { className: 'mother-calendar-modal modal-body' });
   const header = el('div', { className: 'mother-calendar-modal-header' });
   const subtitle = el(
     'p',
-    { className: 'mother-calendar-modal-subtitle' },
+    { className: 'app-calendar-subtitle' },
     `${events.length} upcoming ${events.length === 1 ? 'event' : 'events'}`
   );
-  header.append(subtitle);
+  const headerActions = el('div', { className: 'mother-calendar-modal-header-actions' });
+  const viewHost = el('div', {});
+  const contentHost = el('div', {});
 
-  if (events.length === 0) {
-    body.append(header);
-    body.append(el('p', { className: 'mother-empty-hint' }, 'No events coming up.'));
-  } else {
-    const todayBtn = el(
-      'button',
-      { className: 'mother-calendar-today-btn', type: 'button', 'aria-label': 'Jump to today' },
-      'Today'
+  const renderView = () => {
+    viewHost.replaceChildren(renderCalendarViewToggle(viewMode, (mode) => {
+      viewMode = mode;
+      renderView();
+    }));
+    contentHost.replaceChildren();
+    if (events.length === 0) {
+      contentHost.append(el('p', { className: 'mother-empty-hint' }, 'No events coming up.'));
+      return;
+    }
+    contentHost.append(
+      viewMode === 'grid'
+        ? renderCalendarGridView(events, { showToolbar: false })
+        : renderCalendarListView(events)
     );
-    todayBtn.addEventListener('click', () => scrollCalendarToToday(body));
-    header.append(todayBtn);
-    body.append(header);
-    const byDay = new Map<string, CalendarEvent[]>();
-    for (const event of events) {
-      const day = event.start_at.slice(0, 10);
-      if (!byDay.has(day)) byDay.set(day, []);
-      byDay.get(day)!.push(event);
-    }
+  };
 
-    const monthsWrap = el('div', { className: 'mother-calendar-months' });
-    const monthStarts = buildMonthStarts(now, events);
-    for (const monthStart of monthStarts) {
-      monthsWrap.append(renderCalendarMonth(monthStart, byDay, now));
-    }
-    body.append(monthsWrap);
-  }
+  header.append(subtitle, headerActions);
+  headerActions.append(viewHost);
+  body.append(header, contentHost);
+  renderView();
 
   showModal('All Upcoming Events', body);
   body.closest('.modal')?.classList.add('mother-calendar-modal-shell');
-  if (events.length > 0) {
-    requestAnimationFrame(() => scrollCalendarToToday(body));
-  }
-}
-
-function buildMonthStarts(now: Date, events: CalendarEvent[]): Date[] {
-  const starts: Date[] = [];
-  const monthStartNow = new Date(now.getFullYear(), now.getMonth(), 1);
-  const eventMonths = events.map((event) => {
-    const date = new Date(event.start_at);
-    return new Date(date.getFullYear(), date.getMonth(), 1);
-  });
-  const earliest = [monthStartNow, ...eventMonths].reduce((min, current) => (current < min ? current : min));
-  const latest = [monthStartNow, ...eventMonths].reduce((max, current) => (current > max ? current : max));
-
-  let cursor = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
-  while (cursor <= latest) {
-    starts.push(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
-    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-  }
-  return starts;
-}
-
-function renderCalendarMonth(monthStart: Date, eventsByDay: Map<string, CalendarEvent[]>, now: Date): HTMLElement {
-  const monthCard = el('section', { className: 'mother-calendar-month' });
-  const monthTitle = monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  monthCard.append(el('h3', { className: 'mother-calendar-month-title' }, monthTitle));
-
-  const weekdays = el('div', { className: 'mother-calendar-weekdays' });
-  for (const label of ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']) {
-    weekdays.append(el('span', { className: 'mother-calendar-weekday' }, label));
-  }
-  monthCard.append(weekdays);
-
-  const grid = el('div', { className: 'mother-calendar-grid' });
-  const firstWeekday = monthStart.getDay();
-  for (let i = 0; i < firstWeekday; i++) {
-    grid.append(el('div', { className: 'mother-calendar-day mother-calendar-day--blank', 'aria-hidden': 'true' }));
-  }
-
-  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
-  for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber++) {
-    const dayDate = new Date(monthStart.getFullYear(), monthStart.getMonth(), dayNumber);
-    const key = dayDate.toISOString().slice(0, 10);
-    const dayEvents = eventsByDay.get(key) ?? [];
-    const isToday = key === now.toISOString().slice(0, 10);
-    const isPast = dayDate < new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const isInCurrentWeek = isDateInCurrentWeek(dayDate, now);
-
-    const dayCell = el('div', {
-      className: `mother-calendar-day${isToday ? ' mother-calendar-day--today' : ''}${isPast ? ' mother-calendar-day--past' : ''}${isInCurrentWeek ? ' mother-calendar-day--current-week' : ''}`,
-    });
-    dayCell.append(el('div', { className: 'mother-calendar-day-number' }, String(dayNumber)));
-
-    if (dayEvents.length > 0) {
-      const eventsList = el('div', { className: 'mother-calendar-day-events' });
-      for (const event of dayEvents) {
-        eventsList.append(
-          el('div', { className: 'mother-calendar-day-event' },
-            el('span', { className: 'mother-calendar-day-event-time' }, formatTime(event.start_at)),
-            el('span', { className: 'mother-calendar-day-event-title' }, event.title)
-          )
-        );
-      }
-      dayCell.append(eventsList);
-    }
-
-    grid.append(dayCell);
-  }
-
-  monthCard.append(grid);
-  return monthCard;
 }
 
 function selectNextOccurrencesForCard(events: CalendarEvent[], limit: number): CalendarEvent[] {
@@ -698,13 +633,6 @@ function selectNextOccurrencesForCard(events: CalendarEvent[], limit: number): C
     if (result.length >= limit) break;
   }
   return result;
-}
-
-function isDateInCurrentWeek(date: Date, today: Date): boolean {
-  const startOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
-  const endOfWeek = new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate() + 7);
-  const candidate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  return candidate >= startOfWeek && candidate < endOfWeek;
 }
 
 function showSwitchUserDialog(): void {

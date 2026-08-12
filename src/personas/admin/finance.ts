@@ -5,6 +5,17 @@ import { el, formatCurrency, formatDate, showModal } from '../../shared/utils';
 import * as XLSX from 'xlsx';
 import type { FinancialAccount, Transaction } from '../../shared/types';
 
+function isChimeAutoSyncEnabled(account: FinancialAccount | undefined): boolean {
+  return !!account?.plaid_item_id;
+}
+
+function chimeBalanceMeta(account: FinancialAccount | undefined): string {
+  if (!account?.last_synced) return 'Not synced';
+  return isChimeAutoSyncEnabled(account)
+    ? `Updated ${formatDate(account.last_synced)}`
+    : `Updated ${formatDate(account.last_synced)} · manual`;
+}
+
 export async function renderAdminFinance(): Promise<void> {
   const content = el('div', {});
 
@@ -13,30 +24,72 @@ export async function renderAdminFinance(): Promise<void> {
     api.getFinancialAccounts(),
     api.getTransactions(),
   ]);
+  const chimeAccount = accounts.find((a) => a.institution.toLowerCase() === 'chime');
+  const chimeAutoSync = isChimeAutoSyncEnabled(chimeAccount);
+
+  const headerActions = el('div', { style: 'display:flex;gap:0.5rem;flex-wrap:wrap' });
+  if (chimeAutoSync) {
+    headerActions.append(
+      el('button', { className: 'btn btn-secondary', type: 'button', id: 'refresh-chime' }, 'Refresh Chime')
+    );
+  } else {
+    headerActions.append(
+      el('button', { className: 'btn btn-secondary', type: 'button', id: 'set-chime-balance' },
+        chimeAccount?.last_balance != null ? 'Update Chime Balance' : 'Enter Chime Balance'
+      )
+    );
+  }
+  headerActions.append(
+    el('button', { className: 'btn btn-secondary', type: 'button', id: 'import-tx' }, 'Import Transactions')
+  );
 
   content.append(
     el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem' },
       el('h2', {}, 'Financials'),
-      el('div', { style: 'display:flex;gap:0.5rem' },
-        el('button', { className: 'btn btn-secondary', type: 'button', id: 'refresh-chime' }, 'Refresh Chime'),
-        el('button', { className: 'btn btn-secondary', type: 'button', id: 'import-tx' }, 'Import Transactions')
-      )
+      headerActions
     )
   );
 
-  const summary = el('div', { className: 'finance-summary' });
-  for (const account of accounts) {
-    summary.append(
-      el('div', { className: 'stat-card' },
-        el('div', { className: 'label' }, `${account.institution} — ${account.account_name}`),
-        el('div', { className: 'value' },
-          account.last_balance != null ? formatCurrency(account.last_balance) : '—'
-        ),
-        el('p', { style: 'font-size:0.8rem;color:var(--color-text-muted);margin:0.25rem 0 0' },
-          account.last_synced ? `Updated ${formatDate(account.last_synced)}` : 'Not synced'
-        )
+  if (!chimeAutoSync) {
+    content.append(
+      el('p', {
+        style: 'font-size:0.9rem;color:var(--color-text-muted);margin:0 0 1rem',
+      },
+        'Chime auto-sync is not connected yet. Enter the current balance manually so it appears on Mom\'s hub.'
       )
     );
+  }
+
+  const summary = el('div', { className: 'finance-summary' });
+  for (const account of accounts) {
+    const isChime = account.institution.toLowerCase() === 'chime';
+    const card = el('div', { className: 'stat-card' },
+      el('div', { className: 'label' }, `${account.institution} — ${account.account_name}`),
+      el('div', { className: 'value' },
+        account.last_balance != null ? formatCurrency(account.last_balance) : '—'
+      ),
+      el('p', { style: 'font-size:0.8rem;color:var(--color-text-muted);margin:0.25rem 0 0' },
+        isChime ? chimeBalanceMeta(account) : (account.last_synced ? `Updated ${formatDate(account.last_synced)}` : 'Not synced')
+      )
+    );
+
+    if (isChime && !isChimeAutoSyncEnabled(account)) {
+      const setBalanceBtn = el('button', {
+        className: 'btn btn-ghost',
+        type: 'button',
+        style: 'margin-top:0.5rem;padding:0.25rem 0;font-size:0.82rem',
+      }, account.last_balance != null ? 'Update balance' : 'Enter balance');
+      setBalanceBtn.addEventListener('click', () => {
+        const form = renderChimeBalanceForm(account.last_balance, async () => {
+          close();
+          await renderAdminFinance();
+        });
+        const close = showModal('Chime Balance', form);
+      });
+      card.append(setBalanceBtn);
+    }
+
+    summary.append(card);
   }
   content.append(summary);
 
@@ -92,6 +145,14 @@ export async function renderAdminFinance(): Promise<void> {
     }
   });
 
+  document.getElementById('set-chime-balance')?.addEventListener('click', () => {
+    const form = renderChimeBalanceForm(chimeAccount?.last_balance ?? null, async () => {
+      close();
+      await renderAdminFinance();
+    });
+    const close = showModal('Chime Balance', form);
+  });
+
   document.getElementById('import-tx')?.addEventListener('click', () => {
     const form = renderImportForm(accounts, session.profile?.id ?? null, async () => {
       close();
@@ -130,6 +191,59 @@ function renderCategoryChart(transactions: Transaction[]): HTMLElement {
   }
 
   return container;
+}
+
+function renderChimeBalanceForm(currentBalance: number | null, onSuccess: () => void): HTMLElement {
+  const form = el('form', { className: 'modal-body' });
+  const initialValue = currentBalance != null ? currentBalance.toFixed(2) : '';
+
+  form.append(
+    el('p', { style: 'font-size:0.9rem;color:var(--color-text-muted);margin:0 0 1rem' },
+      'Enter the current Chime balance. It will show on Mom\'s hub until auto-sync is connected.'
+    ),
+    el('div', { className: 'form-group' },
+      el('label', { for: 'chime-balance' }, 'Current balance'),
+      el('input', {
+        type: 'number',
+        id: 'chime-balance',
+        name: 'chime-balance',
+        required: 'true',
+        min: '0',
+        step: '0.01',
+        inputmode: 'decimal',
+        placeholder: '0.00',
+        value: initialValue,
+      })
+    ),
+    el('p', { id: 'chime-balance-status', style: 'font-size:0.85rem;color:var(--color-text-muted)' }),
+    el('button', { className: 'btn btn-primary btn-block', type: 'submit' }, 'Save Balance')
+  );
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = form.querySelector('#chime-balance-status') as HTMLElement;
+    const raw = (form.querySelector('#chime-balance') as HTMLInputElement).value.trim();
+    const balance = parseFloat(raw);
+
+    if (!Number.isFinite(balance) || balance < 0) {
+      status.textContent = 'Enter a valid balance of zero or more.';
+      status.style.color = 'var(--color-danger)';
+      return;
+    }
+
+    status.textContent = 'Saving...';
+    status.style.color = 'var(--color-text-muted)';
+
+    try {
+      await api.setChimeBalance(balance);
+      onSuccess();
+    } catch (err) {
+      status.textContent = err instanceof Error ? err.message : 'Could not save balance';
+      status.style.color = 'var(--color-danger)';
+    }
+  });
+
+  return form;
 }
 
 function renderImportForm(

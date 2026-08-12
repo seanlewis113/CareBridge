@@ -216,6 +216,7 @@ export function renderAdminShell(content: HTMLElement, activePath: string): void
 export function renderCaregiverShell(content: HTMLElement, activePath: string): void {
   const app = document.getElementById('app')!;
   app.className = 'caregiver-app';
+  const isAdminPreview = isAdminProfile();
 
   const allItems: NavItem[] = [
     { path: '/caregiver', label: 'Today', icon: 'sun' },
@@ -230,11 +231,11 @@ export function renderCaregiverShell(content: HTMLElement, activePath: string): 
   const moreItems = allItems.slice(4);
 
   const layout = el('div', { className: 'caregiver-layout page-enter' });
-  const sidebar = renderSidebar("Mom's Care", allItems, activePath);
+  const sidebar = renderSidebar("Mom's Care", allItems, activePath, isAdminPreview);
   const body = el('div', { className: 'app-shell-body' });
 
   body.append(
-    renderMobileHeader("Mom's Care"),
+    renderMobileHeader("Mom's Care", isAdminPreview),
     el('main', { className: 'app-content' }, content),
     renderBottomNav(primaryItems, moreItems, activePath)
   );

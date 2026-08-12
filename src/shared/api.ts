@@ -194,6 +194,16 @@ export const api = {
     return expandRecurringEvents(events, from, to);
   },
 
+  async getCalendarEvent(id: string): Promise<CalendarEvent | null> {
+    const sourceId = getSourceEventId(id);
+    if (isSupabaseConfigured) {
+      const { data, error } = await db().from('calendar_events').select('*').eq('id', sourceId).single();
+      if (error) return null;
+      return data as CalendarEvent;
+    }
+    return getLocal('calendar_events').find((e) => e.id === sourceId) ?? null;
+  },
+
   async createCalendarEvent(event: Omit<CalendarEvent, 'id' | 'created_at' | 'synced_at'>): Promise<CalendarEvent> {
     const newEvent: CalendarEvent = {
       ...event,
@@ -234,6 +244,8 @@ export const api = {
         .select()
         .single();
       if (error) throw error;
+      const updated = data as CalendarEvent;
+      await this.syncEventToGoogle(updated);
       await this.logActivity('calendar.update', {
         entityType: 'calendar_event',
         entityId: id,
@@ -854,6 +866,49 @@ export const api = {
       last_balance: chime.last_balance,
       last_synced: new Date().toISOString(),
     });
+  },
+
+  async setChimeBalance(balance: number): Promise<FinancialAccount> {
+    const accounts = await this.getFinancialAccounts();
+    const chime = accounts.find((a) => a.institution.toLowerCase() === 'chime');
+    const updates = {
+      last_balance: balance,
+      last_synced: new Date().toISOString(),
+    };
+
+    if (chime) {
+      return this.updateFinancialAccount(chime.id, {
+        ...updates,
+        display_on_mother_hub: true,
+      });
+    }
+
+    const newAccount: FinancialAccount = {
+      id: crypto.randomUUID(),
+      institution: 'Chime',
+      account_name: 'Spending',
+      plaid_item_id: null,
+      display_on_mother_hub: true,
+      ...updates,
+    };
+
+    if (isSupabaseConfigured) {
+      const { data, error } = await db()
+        .from('financial_accounts')
+        .insert(newAccount)
+        .select()
+        .single();
+      if (error) throw error;
+      await this.logActivity('financial_account.update', {
+        entityType: 'financial_account',
+        entityId: newAccount.id,
+        metadata: { changes: updates, source: 'manual_balance' },
+      });
+      return data as FinancialAccount;
+    }
+
+    updateLocal('financial_accounts', (items) => [...items, newAccount]);
+    return newAccount;
   },
 
   async getTransactions(): Promise<Transaction[]> {

@@ -1,61 +1,75 @@
 import { api } from '../../shared/api';
+import {
+  getCalendarViewMode,
+  renderCalendarGridView,
+  renderCalendarListView,
+  renderCalendarViewToggle,
+} from '../../shared/calendarViews';
 import { renderAdminShell } from '../shared/shell';
-import { el, formatDate, formatTime, showModal, confirmDialog } from '../../shared/utils';
-import { renderAddEventForm } from '../mother/add-event';
+import { el, confirmDialog } from '../../shared/utils';
+import { openEventEditorModal } from '../mother/add-event';
+import type { CalendarEvent } from '../../shared/types';
 
 export async function renderAdminCalendar(): Promise<void> {
   const content = el('div', {});
+  let viewMode = getCalendarViewMode();
+  const eventsContainer = el('div', {});
+
+  const headerActions = el('div', { className: 'calendar-page-header-actions' });
+  const viewToggleHost = el('div', {});
+  const actionButtons = el('div', { style: 'display:flex;gap:0.5rem' },
+    el('button', { className: 'btn btn-secondary', type: 'button', id: 'sync-google' }, 'Sync Google Calendar'),
+    el('button', { className: 'btn btn-primary', type: 'button', id: 'add-event' }, '+ Add Event')
+  );
+  headerActions.append(viewToggleHost, actionButtons);
 
   content.append(
-    el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem' },
+    el('div', { className: 'calendar-page-header' },
       el('h2', {}, 'Calendar'),
-      el('div', { style: 'display:flex;gap:0.5rem' },
-        el('button', { className: 'btn btn-secondary', type: 'button', id: 'sync-google' }, 'Sync Google Calendar'),
-        el('button', { className: 'btn btn-primary', type: 'button', id: 'add-event' }, '+ Add Event')
-      )
+      headerActions
     )
   );
 
   const statusEl = el('p', { id: 'sync-status', style: 'font-size:0.85rem;color:var(--color-text-muted)' });
-  content.append(statusEl);
+  content.append(statusEl, eventsContainer);
 
-  const events = await api.getUpcomingEvents(30);
-  const list = el('div', {});
+  const renderEvents = async () => {
+    const events = await api.getUpcomingEvents(30);
+    eventsContainer.replaceChildren();
 
-  if (events.length === 0) {
-    list.append(el('p', { className: 'empty-state' }, 'No upcoming events.'));
-  } else {
-    const grouped = groupByDay(events);
-    for (const [day, dayEvents] of grouped) {
-      const group = el('div', { className: 'calendar-day-group' }, el('h3', {}, formatDate(day + 'T12:00:00')));
-      for (const event of dayEvents) {
-        const row = el('div', { className: 'list-item' },
-          el('div', {},
-            el('strong', {}, formatTime(event.start_at)),
-            ' — ',
-            event.title,
-            event.google_event_id ? el('span', { style: 'font-size:0.8rem;color:var(--color-text-muted);margin-left:0.5rem' }, '(Google)') : null
-          ),
-          el('button', { className: 'btn btn-danger', type: 'button', style: 'padding:0.35rem 0.75rem;min-height:auto' }, 'Delete')
-        );
-        row.querySelector('button')?.addEventListener('click', async () => {
-          if (await confirmDialog('Delete this event?')) {
-            await api.deleteCalendarEvent(event.id);
-            await renderAdminCalendar();
-          }
-        });
-        group.append(row);
-      }
-      list.append(group);
+    viewToggleHost.replaceChildren(renderCalendarViewToggle(viewMode, (mode) => {
+      viewMode = mode;
+      void renderEvents();
+    }));
+
+    const eventActions = {
+      onEdit: async (event: CalendarEvent) => {
+        await openEventEditorModal(event, renderEvents);
+      },
+      onDelete: async (event: CalendarEvent) => {
+        if (await confirmDialog('Delete this event?')) {
+          await api.deleteCalendarEvent(event.id);
+          await renderEvents();
+        }
+      },
+    };
+
+    if (viewMode === 'grid') {
+      eventsContainer.append(renderCalendarGridView(events, eventActions));
+      return;
     }
-  }
-  content.append(list);
 
+    eventsContainer.append(renderCalendarListView(events, {
+      showGoogleBadge: true,
+      ...eventActions,
+    }));
+  };
+
+  await renderEvents();
   renderAdminShell(content, '/admin/calendar');
 
   document.getElementById('add-event')?.addEventListener('click', () => {
-    const form = renderAddEventForm(async () => { close(); await renderAdminCalendar(); });
-    const close = showModal('Add Event', form);
+    void openEventEditorModal(undefined, renderAdminCalendar);
   });
 
   document.getElementById('sync-google')?.addEventListener('click', async () => {
@@ -68,14 +82,4 @@ export async function renderAdminCalendar(): Promise<void> {
       statusEl.textContent = 'Google Calendar sync requires Supabase configuration. Events are stored locally in demo mode.';
     }
   });
-}
-
-function groupByDay<T extends { start_at: string }>(items: T[]): [string, T[]][] {
-  const map = new Map<string, T[]>();
-  for (const item of items) {
-    const day = item.start_at.slice(0, 10);
-    if (!map.has(day)) map.set(day, []);
-    map.get(day)!.push(item);
-  }
-  return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
