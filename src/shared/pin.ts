@@ -25,7 +25,8 @@ async function pinMatches(storedHash: string | null, pin: string, defaultPin: st
 
 export async function verifyMotherPin(pin: string): Promise<boolean> {
   if (isSupabaseConfigured) {
-    const { data, error } = await getSupabase().rpc('verify_mother_pin', { input_pin: pin });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (getSupabase() as any).rpc('verify_mother_pin', { input_pin: pin });
     if (error) throw error;
     return !!data;
   }
@@ -35,7 +36,8 @@ export async function verifyMotherPin(pin: string): Promise<boolean> {
 
 export async function verifyAdminSwitchPin(pin: string): Promise<boolean> {
   if (isSupabaseConfigured) {
-    const { data, error } = await getSupabase().rpc('verify_admin_switch_pin', { input_pin: pin });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (getSupabase() as any).rpc('verify_admin_switch_pin', { input_pin: pin });
     if (error) throw error;
     return !!data;
   }

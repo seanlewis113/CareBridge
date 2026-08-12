@@ -262,6 +262,7 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['financial_access_log']['Insert']>;
       };
     };
+    Views: Record<string, never>;
     Functions: {
       verify_mother_pin: {
         Args: { input_pin: string };
