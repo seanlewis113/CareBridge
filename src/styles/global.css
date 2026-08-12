@@ -593,3 +593,40 @@ button, input, select, textarea {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* App version badge (lower-left) */
+.app-version-badge {
+  position: fixed;
+  bottom: max(0.35rem, env(safe-area-inset-bottom));
+  left: max(0.35rem, env(safe-area-inset-left));
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.65rem;
+  line-height: 1.25;
+  color: var(--color-text-muted);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.app-version-number {
+  font-weight: 800;
+}
+
+.app-version-date {
+  font-weight: 600;
+}
+
+.admin-app .app-version-badge,
+.caregiver-app .app-version-badge {
+  bottom: calc(3.75rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 900px) {
+  .admin-app .app-version-badge,
+  .caregiver-app .app-version-badge {
+    bottom: max(0.35rem, env(safe-area-inset-bottom));
+  }
+}

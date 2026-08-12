@@ -1,6 +1,6 @@
 import { api } from '../../shared/api';
-import { signOut } from '../../shared/auth';
-import { navigate } from '../../shared/router';
+import { clearActivePersona } from '../../shared/auth';
+import { navigate, MODULE_SELECT_PATH } from '../../shared/router';
 import { el, greeting, formatDate, formatTime, formatCurrency, showModal, verifyPin, timeOfDayClass, showToast } from '../../shared/utils';
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm } from './add-event';
@@ -755,9 +755,9 @@ function showSwitchUserDialog(): void {
     const settings = await api.getSettings();
     const valid = await verifyPin(currentPin, settings.admin_switch_pin_hash);
     if (valid) {
-      signOut();
+      clearActivePersona();
       close();
-      await navigate('/');
+      await navigate(MODULE_SELECT_PATH);
     } else {
       const err = form.querySelector('#switch-error') as HTMLElement;
       err.textContent = 'Incorrect PIN. Default is 1234 if not set.';

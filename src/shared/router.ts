@@ -23,11 +23,19 @@ function getPathFromHash(): string {
   return hash || '/';
 }
 
+function updateBodyAppClass(path: string): void {
+  document.body.classList.remove('admin-app', 'caregiver-app', 'mother-app');
+  if (path.startsWith('/admin')) document.body.classList.add('admin-app');
+  else if (path.startsWith('/caregiver')) document.body.classList.add('caregiver-app');
+  else if (path.startsWith('/mother')) document.body.classList.add('mother-app');
+}
+
 export async function navigate(path: string): Promise<void> {
   if (!appRoot) return;
   currentRoute = path;
   window.location.hash = path;
   onNavigate?.(path);
+  updateBodyAppClass(path);
 
   let handler = routes.get(path);
   if (!handler && path.startsWith('/admin')) handler = routes.get('/admin/*');
@@ -47,6 +55,8 @@ export async function navigate(path: string): Promise<void> {
 export function getCurrentRoute(): string {
   return currentRoute;
 }
+
+export const MODULE_SELECT_PATH = '/select';
 
 export function personaHome(persona: Persona): string {
   switch (persona) {

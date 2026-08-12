@@ -1,13 +1,19 @@
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // Use the directory containing this config file (works via MomsCare junction without apostrophe issues)
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf-8'));
 
 export default defineConfig({
   root: rootDir,
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
   resolve: {
     preserveSymlinks: false,
   },

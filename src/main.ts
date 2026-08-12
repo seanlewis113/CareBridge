@@ -6,7 +6,7 @@ import './styles/admin.css';
 
 import { initRouter, registerRoute, navigate, getCurrentRoute } from './shared/router';
 import { isAdmin, isCaregiver, isMother } from './shared/auth';
-import { renderLanding } from './personas/landing';
+import { renderLanding, renderModuleSelect } from './personas/landing';
 import { renderMotherHub } from './personas/mother/hub';
 import { renderAdminDashboard } from './personas/admin/dashboard';
 import { renderAdminTasks } from './personas/admin/tasks';
@@ -24,6 +24,7 @@ import { renderCaregiverVisitForm } from './personas/caregiver/visit';
 import { renderCaregiverNotes } from './personas/caregiver/notes';
 import { renderCaregiverDocuments } from './personas/caregiver/documents';
 import { api } from './shared/api';
+import { mountVersionBadge } from './shared/version';
 
 async function guardMother(): Promise<boolean> {
   if (!isMother()) {
@@ -51,6 +52,7 @@ async function guardCaregiver(): Promise<boolean> {
 
 function registerRoutes(): void {
   registerRoute('/', () => renderLanding());
+  registerRoute('/select', () => renderModuleSelect());
 
   registerRoute('/mother', async () => {
     if (!(await guardMother())) return;
@@ -166,6 +168,8 @@ async function init(): Promise<void> {
       await Promise.all(cacheKeys.map((key) => caches.delete(key)));
     }
   }
+
+  mountVersionBadge();
 
   registerRoutes();
   initRouter(app);

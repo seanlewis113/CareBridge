@@ -190,6 +190,36 @@ export async function signInAsPersona(persona: Persona, pin?: string): Promise<b
   return true;
 }
 
+export function restorePersonaFromProfile(): boolean {
+  if (!session.profile) return false;
+  session = {
+    ...session,
+    persona: session.profile.persona,
+    motherDeviceMode: false,
+    financialUnlockedUntil: null,
+  };
+  saveSession();
+  return true;
+}
+
+export function clearActivePersona(): void {
+  session = {
+    ...session,
+    persona: null,
+    motherDeviceMode: false,
+    financialUnlockedUntil: null,
+  };
+  saveSession();
+}
+
+export function isAuthenticated(): boolean {
+  return session.profile !== null;
+}
+
+export function isAdminProfile(): boolean {
+  return session.profile?.persona === 'admin';
+}
+
 export function signOut(): void {
   if (isSupabaseConfigured) {
     getSupabase().auth.signOut();

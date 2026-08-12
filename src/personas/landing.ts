@@ -1,7 +1,15 @@
 import type { Persona } from '../shared/types';
 import { PERSONA_LABELS } from '../shared/types';
-import { signInAsPersona, signInWithEmail, signUpWithEmail, getSession, refreshSessionFromSupabase } from '../shared/auth';
-import { navigate, personaHome } from '../shared/router';
+import {
+  signInAsPersona,
+  signInWithEmail,
+  signUpWithEmail,
+  getSession,
+  refreshSessionFromSupabase,
+  isAdminProfile,
+  restorePersonaFromProfile,
+} from '../shared/auth';
+import { navigate, personaHome, MODULE_SELECT_PATH } from '../shared/router';
 import { el, showModal } from '../shared/utils';
 import { icon } from '../shared/icons';
 import { isSupabaseConfigured } from '../shared/supabase';
@@ -36,7 +44,79 @@ export async function renderLanding(): Promise<void> {
 
   const hero = el('div', { className: 'landing-hero' },
     logoMark,
-    el('p', {}, 'Family care coordination — choose who you are today')
+    el('p', {}, 'Family care coordination for your household')
+  );
+
+  const loginCard = el('div', { className: 'login-card' },
+    el('h2', { className: 'login-card-title' }, icon('mail'), el('span', {}, 'Sign in'))
+  );
+
+  if (isSupabaseConfigured) {
+    loginCard.append(
+      el('p', { className: 'login-card-hint' },
+        'Accounts are created by your family admin. Sign in with the email and password they provided.'
+      ),
+      createEmailLoginForm()
+    );
+  } else {
+    loginCard.append(createEmailAccessPanel());
+  }
+
+  const footer = el('div', { className: 'landing-footer' });
+
+  if (!isSupabaseConfigured) {
+    footer.append(
+      el('div', { className: 'landing-demo-badge' },
+        icon('sparkles'),
+        'Demo mode — data saved locally'
+      )
+    );
+  }
+
+  const altAccess = el('div', { className: 'landing-alt-access' });
+
+  const momTabletBtn = el('button', { className: 'btn btn-ghost btn-block', type: 'button' },
+    icon('home'),
+    "Mom's tablet"
+  );
+  momTabletBtn.addEventListener('click', () => showPersonaLogin('mother', true));
+  altAccess.append(momTabletBtn);
+
+  const pinAccessBtn = el('button', { className: 'btn btn-ghost btn-block', type: 'button' },
+    icon('users'),
+    'Enter with family PIN'
+  );
+  pinAccessBtn.addEventListener('click', () => navigate(MODULE_SELECT_PATH));
+  altAccess.append(pinAccessBtn);
+
+  footer.append(altAccess);
+  container.append(hero, loginCard, footer);
+  app.replaceChildren(container);
+}
+
+export async function renderModuleSelect(): Promise<void> {
+  const app = document.getElementById('app')!;
+  const session = getSession();
+
+  if (session.persona && !isAdminProfile()) {
+    await navigate(personaHome(session.persona));
+    return;
+  }
+
+  const container = el('div', { className: 'landing page-enter' });
+
+  const logoMark = el('div', { className: 'landing-logo' },
+    el('div', { className: 'landing-logo-mark' }, icon('heart')),
+    el('h1', {}, "Mom's Care")
+  );
+
+  const subtitle = isAdminProfile()
+    ? 'Preview the app as each family member — your account stays signed in'
+    : 'Choose who you are today';
+
+  const hero = el('div', { className: 'landing-hero' },
+    logoMark,
+    el('p', {}, subtitle)
   );
 
   const grid = el('div', { className: 'persona-grid' });
@@ -58,21 +138,26 @@ export async function renderLanding(): Promise<void> {
   }
 
   const footer = el('div', { className: 'landing-footer' });
-  if (!isSupabaseConfigured) {
-    footer.append(
-      el('div', { className: 'landing-demo-badge' },
-        icon('sparkles'),
-        'Demo mode — data saved locally'
-      )
-    );
-  }
 
-  const emailSection = el('details', { className: 'email-login' });
-  emailSection.append(
-    el('summary', {}, icon('mail'), el('span', {}, 'Family account access')),
-    createEmailAccessPanel()
-  );
-  footer.append(emailSection);
+  if (isAdminProfile()) {
+    const backBtn = el('button', { className: 'btn btn-secondary btn-block', type: 'button' },
+      icon('arrow-right'),
+      'Return to Admin'
+    );
+    backBtn.addEventListener('click', () => {
+      if (restorePersonaFromProfile()) {
+        navigate(personaHome('admin'));
+      }
+    });
+    footer.append(backBtn);
+  } else {
+    const backBtn = el('button', { className: 'btn btn-ghost btn-block', type: 'button' },
+      icon('arrow-right'),
+      'Back to sign in'
+    );
+    backBtn.addEventListener('click', () => navigate('/'));
+    footer.append(backBtn);
+  }
 
   container.append(hero, grid, footer);
   app.replaceChildren(container);
@@ -80,16 +165,6 @@ export async function renderLanding(): Promise<void> {
 
 function createEmailAccessPanel(): HTMLElement {
   const wrapper = el('div', { className: 'email-access-panel' });
-
-  if (isSupabaseConfigured) {
-    wrapper.append(
-      el('p', { style: 'margin:0.75rem 0 0;font-size:0.9rem;color:var(--color-text-muted)' },
-        'Accounts are created by your family admin. Sign in with the email and password they provided.'
-      ),
-      createEmailLoginForm()
-    );
-    return wrapper;
-  }
 
   const tabBar = el('div', { className: 'email-auth-tabs' });
   const signInTab = el('button', { type: 'button', className: 'email-auth-tab active' }, 'Sign in');

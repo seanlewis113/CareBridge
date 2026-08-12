@@ -1,5 +1,5 @@
-import { signOut } from '../../shared/auth';
-import { navigate, link } from '../../shared/router';
+import { clearActivePersona, isAdminProfile, signOut } from '../../shared/auth';
+import { navigate, link, MODULE_SELECT_PATH } from '../../shared/router';
 import { el } from '../../shared/utils';
 import { icon, type IconName } from '../../shared/icons';
 
@@ -19,7 +19,8 @@ function isActive(activePath: string, itemPath: string): boolean {
 function renderSidebar(
   brandTitle: string,
   navItems: NavItem[],
-  activePath: string
+  activePath: string,
+  isAdminShell = false
 ): HTMLElement {
   const sidebar = el('aside', { className: 'app-sidebar' });
 
@@ -38,9 +39,17 @@ function renderSidebar(
 
   const switchBtn = el('button', { className: 'btn btn-ghost', type: 'button' },
     icon('log-out'),
-    'Switch Persona'
+    isAdminShell ? 'Switch Persona' : 'Sign out'
   );
-  switchBtn.addEventListener('click', () => { signOut(); navigate('/'); });
+  switchBtn.addEventListener('click', () => {
+    if (isAdminShell && isAdminProfile()) {
+      clearActivePersona();
+      navigate(MODULE_SELECT_PATH);
+    } else {
+      signOut();
+      navigate('/');
+    }
+  });
 
   const footer = el('div', { className: 'app-sidebar-footer' }, switchBtn);
 
@@ -48,11 +57,23 @@ function renderSidebar(
   return sidebar;
 }
 
-function renderMobileHeader(title: string): HTMLElement {
-  const switchBtn = el('button', { className: 'btn btn-ghost btn-icon', type: 'button', 'aria-label': 'Switch persona' },
+function renderMobileHeader(title: string, isAdminShell = false): HTMLElement {
+  const switchBtn = el('button', {
+    className: 'btn btn-ghost btn-icon',
+    type: 'button',
+    'aria-label': isAdminShell ? 'Switch persona' : 'Sign out',
+  },
     icon('log-out')
   );
-  switchBtn.addEventListener('click', () => { signOut(); navigate('/'); });
+  switchBtn.addEventListener('click', () => {
+    if (isAdminShell && isAdminProfile()) {
+      clearActivePersona();
+      navigate(MODULE_SELECT_PATH);
+    } else {
+      signOut();
+      navigate('/');
+    }
+  });
 
   return el('header', { className: 'app-header' },
     el('h1', {},
@@ -134,11 +155,11 @@ export function renderAdminShell(content: HTMLElement, activePath: string): void
   const moreItems = allItems.slice(4);
 
   const layout = el('div', { className: 'admin-layout page-enter' });
-  const sidebar = renderSidebar("Mom's Care", allItems, activePath);
+  const sidebar = renderSidebar("Mom's Care", allItems, activePath, true);
   const body = el('div', { className: 'app-shell-body' });
 
   body.append(
-    renderMobileHeader('Admin'),
+    renderMobileHeader('Admin', true),
     el('main', { className: 'app-content' }, content),
     renderBottomNav(primaryItems, moreItems, activePath)
   );
