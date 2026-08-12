@@ -1,4 +1,4 @@
--- Verify PINs server-side so anon clients never need to read app_settings hashes.
+-- Re-apply PIN verify RPCs with extensions in search_path (digest() lives there on Supabase).
 
 CREATE OR REPLACE FUNCTION verify_mother_pin(input_pin TEXT)
 RETURNS BOOLEAN

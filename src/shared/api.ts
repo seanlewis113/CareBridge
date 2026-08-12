@@ -61,6 +61,14 @@ export function setActivityContext(ctx: ActivityContext): void {
   activityContext = ctx;
 }
 
+function pickPrevious<T extends object>(before: T, updates: Partial<T>): Partial<T> {
+  const previous = {} as Partial<T>;
+  for (const key of Object.keys(updates) as (keyof T)[]) {
+    previous[key] = before[key];
+  }
+  return previous;
+}
+
 export const api = {
   async getSettings(): Promise<AppSettings> {
     if (isSupabaseConfigured) {
@@ -95,6 +103,7 @@ export const api = {
 
   async updateSettings(updates: Partial<AppSettings>): Promise<AppSettings> {
     if (isSupabaseConfigured) {
+      const before = await this.getSettings();
       const { data, error } = await db()
         .from('app_settings')
         .update({ ...updates, updated_at: new Date().toISOString() })
@@ -102,7 +111,9 @@ export const api = {
         .select()
         .single();
       if (error) throw error;
-      await this.logActivity('settings.update', { metadata: { fields: Object.keys(updates) } });
+      await this.logActivity('settings.update', {
+        metadata: { fields: Object.keys(updates), previous: pickPrevious(before, updates) },
+      });
       return data as AppSettings;
     }
     const settings = { ...getLocal('settings'), ...updates };
@@ -187,6 +198,12 @@ export const api = {
 
   async updateCalendarEvent(id: string, updates: Partial<CalendarEvent>): Promise<CalendarEvent> {
     if (isSupabaseConfigured) {
+      const { data: before, error: beforeError } = await db()
+        .from('calendar_events')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (beforeError) throw beforeError;
       const { data, error } = await db()
         .from('calendar_events')
         .update(updates)
@@ -197,7 +214,7 @@ export const api = {
       await this.logActivity('calendar.update', {
         entityType: 'calendar_event',
         entityId: id,
-        metadata: updates,
+        metadata: { changes: updates, previous: pickPrevious(before as CalendarEvent, updates) },
       });
       return data as CalendarEvent;
     }
@@ -217,12 +234,37 @@ export const api = {
   async deleteCalendarEvent(id: string): Promise<void> {
     const sourceId = getSourceEventId(id);
     if (isSupabaseConfigured) {
+      const { data: snapshot, error: fetchError } = await db()
+        .from('calendar_events')
+        .select('*')
+        .eq('id', sourceId)
+        .single();
+      if (fetchError) throw fetchError;
       const { error } = await db().from('calendar_events').delete().eq('id', sourceId);
       if (error) throw error;
-      await this.logActivity('calendar.delete', { entityType: 'calendar_event', entityId: sourceId });
+      await this.logActivity('calendar.delete', {
+        entityType: 'calendar_event',
+        entityId: sourceId,
+        metadata: { snapshot, title: (snapshot as CalendarEvent).title },
+      });
       return;
     }
     updateLocal('calendar_events', (items) => items.filter((e) => e.id !== sourceId));
+  },
+
+  async restoreCalendarEvent(snapshot: CalendarEvent): Promise<CalendarEvent> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await db().from('calendar_events').insert(snapshot).select().single();
+      if (error) throw error;
+      await this.logActivity('calendar.create', {
+        entityType: 'calendar_event',
+        entityId: (data as CalendarEvent).id,
+        metadata: { title: snapshot.title, restored: true },
+      });
+      return data as CalendarEvent;
+    }
+    updateLocal('calendar_events', (items) => [...items, snapshot]);
+    return snapshot;
   },
 
   async syncCalendarFromGoogle(): Promise<CalendarEvent[]> {
@@ -279,12 +321,14 @@ export const api = {
 
   async updateTask(id: string, updates: Partial<Task>): Promise<Task> {
     if (isSupabaseConfigured) {
+      const { data: before, error: beforeError } = await db().from('tasks').select('*').eq('id', id).single();
+      if (beforeError) throw beforeError;
       const { data, error } = await db().from('tasks').update(updates).eq('id', id).select().single();
       if (error) throw error;
       await this.logActivity('task.update', {
         entityType: 'task',
         entityId: id,
-        metadata: updates,
+        metadata: { changes: updates, previous: pickPrevious(before as Task, updates) },
       });
       return data as Task;
     }
@@ -303,13 +347,47 @@ export const api = {
 
   async deleteTask(id: string): Promise<void> {
     if (isSupabaseConfigured) {
+      const { data: snapshot, error: fetchError } = await db().from('tasks').select('*').eq('id', id).single();
+      if (fetchError) throw fetchError;
       const { error } = await db().from('tasks').delete().eq('id', id);
       if (error) throw error;
-      await this.logActivity('task.delete', { entityType: 'task', entityId: id });
+      await this.logActivity('task.delete', {
+        entityType: 'task',
+        entityId: id,
+        metadata: { snapshot, title: (snapshot as Task).title },
+      });
       return;
     }
+    const snapshot = getLocal('tasks').find((t) => t.id === id);
     updateLocal('tasks', (items) => items.filter((t) => t.id !== id));
     updateLocal('task_assignments', (items) => items.filter((a) => a.task_id !== id));
+    if (snapshot) {
+      await this.logActivity('task.delete', {
+        entityType: 'task',
+        entityId: id,
+        metadata: { snapshot, title: snapshot.title },
+      });
+    }
+  },
+
+  async restoreTask(snapshot: Task): Promise<Task> {
+    const task: Task = {
+      ...snapshot,
+      checklist: Array.isArray(snapshot.checklist) ? snapshot.checklist : [],
+      show_on_mother_hub: snapshot.show_on_mother_hub !== false,
+    };
+    if (isSupabaseConfigured) {
+      const { data, error } = await db().from('tasks').insert(task).select().single();
+      if (error) throw error;
+      await this.logActivity('task.create', {
+        entityType: 'task',
+        entityId: (data as Task).id,
+        metadata: { title: task.title, restored: true },
+      });
+      return { ...(data as Task), checklist: task.checklist, show_on_mother_hub: task.show_on_mother_hub };
+    }
+    updateLocal('tasks', (items) => [...items, task]);
+    return task;
   },
 
   async getTaskAssignments(): Promise<TaskAssignment[]> {
@@ -388,12 +466,14 @@ export const api = {
 
   async updateReminder(id: string, updates: Partial<Reminder>): Promise<Reminder> {
     if (isSupabaseConfigured) {
+      const { data: before, error: beforeError } = await db().from('reminders').select('*').eq('id', id).single();
+      if (beforeError) throw beforeError;
       const { data, error } = await db().from('reminders').update(updates).eq('id', id).select().single();
       if (error) throw error;
       await this.logActivity('reminder.update', {
         entityType: 'reminder',
         entityId: id,
-        metadata: updates,
+        metadata: { changes: updates, previous: pickPrevious(before as Reminder, updates) },
       });
       return data as Reminder;
     }
@@ -412,12 +492,33 @@ export const api = {
 
   async deleteReminder(id: string): Promise<void> {
     if (isSupabaseConfigured) {
+      const { data: snapshot, error: fetchError } = await db().from('reminders').select('*').eq('id', id).single();
+      if (fetchError) throw fetchError;
       const { error } = await db().from('reminders').delete().eq('id', id);
       if (error) throw error;
-      await this.logActivity('reminder.delete', { entityType: 'reminder', entityId: id });
+      await this.logActivity('reminder.delete', {
+        entityType: 'reminder',
+        entityId: id,
+        metadata: { snapshot, body: (snapshot as Reminder).body },
+      });
       return;
     }
     updateLocal('reminders', (items) => items.filter((r) => r.id !== id));
+  },
+
+  async restoreReminder(snapshot: Reminder): Promise<Reminder> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await db().from('reminders').insert(snapshot).select().single();
+      if (error) throw error;
+      await this.logActivity('reminder.create', {
+        entityType: 'reminder',
+        entityId: (data as Reminder).id,
+        metadata: { body: snapshot.body, restored: true },
+      });
+      return data as Reminder;
+    }
+    updateLocal('reminders', (items) => [snapshot, ...items]);
+    return snapshot;
   },
 
   async getVisitNotes(): Promise<VisitNote[]> {
@@ -480,9 +581,15 @@ export const api = {
 
   async deleteDocument(id: string): Promise<void> {
     if (isSupabaseConfigured) {
+      const { data: snapshot, error: fetchError } = await db().from('documents').select('*').eq('id', id).single();
+      if (fetchError) throw fetchError;
       const { error } = await db().from('documents').delete().eq('id', id);
       if (error) throw error;
-      await this.logActivity('document.delete', { entityType: 'document', entityId: id });
+      await this.logActivity('document.delete', {
+        entityType: 'document',
+        entityId: id,
+        metadata: { snapshot, name: (snapshot as Document).name },
+      });
       return;
     }
     updateLocal('documents', (items) => items.filter((d) => d.id !== id));
@@ -545,11 +652,21 @@ export const api = {
       await this.logActivity('family_update.create', {
         entityType: 'family_update',
         entityId: (data as FamilyUpdate).id,
+        metadata: { body: update.body },
       });
       return data as FamilyUpdate;
     }
     updateLocal('family_updates', (items) => [update, ...items]);
     return update;
+  },
+
+  async deleteFamilyUpdate(id: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { error } = await db().from('family_updates').delete().eq('id', id);
+      if (error) throw error;
+      return;
+    }
+    updateLocal('family_updates', (items) => items.filter((u) => u.id !== id));
   },
 
   async getFinancialAccounts(): Promise<FinancialAccount[]> {
@@ -563,6 +680,12 @@ export const api = {
 
   async updateFinancialAccount(id: string, updates: Partial<FinancialAccount>): Promise<FinancialAccount> {
     if (isSupabaseConfigured) {
+      const { data: before, error: beforeError } = await db()
+        .from('financial_accounts')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (beforeError) throw beforeError;
       const { data, error } = await db()
         .from('financial_accounts')
         .update(updates)
@@ -573,7 +696,7 @@ export const api = {
       await this.logActivity('financial_account.update', {
         entityType: 'financial_account',
         entityId: id,
-        metadata: updates,
+        metadata: { changes: updates, previous: pickPrevious(before as FinancialAccount, updates) },
       });
       return data as FinancialAccount;
     }
@@ -719,6 +842,23 @@ export const api = {
       ...log,
       profile: log.profile_id ? profiles.find((p) => p.id === log.profile_id) : undefined,
     }));
+  },
+
+  async markActivityReverted(id: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      try {
+        await db().rpc('mark_activity_reverted', { p_log_id: id });
+      } catch {
+        // Fall back silently if migration not applied yet
+      }
+      return;
+    }
+
+    updateLocal('activity_log', (items) =>
+      items.map((log) =>
+        log.id === id ? { ...log, metadata: { ...log.metadata, reverted: true } } : log
+      )
+    );
   },
 };
 

@@ -48,21 +48,36 @@ export async function renderAdminFinance(): Promise<void> {
   if (transactions.length === 0) {
     txList.append(el('p', { className: 'empty-state' }, 'No transactions yet. Import an Excel or CSV export from your bank.'));
   } else {
+    const table = el('div', { className: 'card-table' },
+      el('div', { className: 'card-table-header' },
+        el('div', { className: 'card-table-row card-table-row--tx' },
+          el('span', {}, 'Date'),
+          el('span', {}, 'Description'),
+          el('span', {}, 'Category'),
+          el('span', {}, 'Amount')
+        )
+      ),
+      el('div', { className: 'card-table-body' })
+    );
+    const body = table.querySelector('.card-table-body')!;
     for (const tx of transactions.slice(0, 50)) {
-      txList.append(
-        el('div', { className: 'list-item' },
-          el('div', {},
+      body.append(
+        el('div', { className: 'card-table-row card-table-row--tx' },
+          el('span', { className: 'card-table-muted' }, formatDate(tx.date)),
+          el('span', {},
             el('strong', {}, tx.description),
-            el('div', { style: 'font-size:0.85rem;color:var(--color-text-muted)' },
-              `${formatDate(tx.date)} · ${tx.account?.institution ?? 'Account'} · ${tx.category ?? 'Uncategorized'}`
+            el('span', { className: 'card-table-muted', style: 'margin-left:0.35rem' },
+              tx.account?.institution ?? 'Account'
             )
           ),
-          el('div', { style: 'font-weight:700;color:' + (tx.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)') },
-            formatCurrency(tx.amount)
-          )
+          el('span', { className: 'card-table-muted' }, tx.category ?? 'Uncategorized'),
+          el('span', {
+            style: 'font-weight:700;text-align:right;color:' + (tx.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)'),
+          }, formatCurrency(tx.amount))
         )
       );
     }
+    txList.append(table);
   }
   content.append(txList);
 

@@ -131,16 +131,26 @@ export async function renderMotherHub(): Promise<void> {
   if (displayEvents.length === 0) {
     eventsBody.append(el('p', { className: 'mother-empty-hint' }, 'No events coming up.'));
   } else {
-    const list = el('div', { className: 'mother-events-list' });
+    const list = el('div', { className: 'mother-events-list card-table' },
+      el('div', { className: 'card-table-header' },
+        el('div', { className: 'card-table-row card-table-row--events' },
+          el('span', {}, 'Date'),
+          el('span', {}, 'Time'),
+          el('span', {}, 'Event')
+        )
+      ),
+      el('div', { className: 'card-table-body' })
+    );
+    const body = list.querySelector('.card-table-body')!;
     const grouped = groupEventsByDay(displayEvents);
     for (const [day, dayEvents] of grouped) {
       const dayLabel = day === todayStr ? 'Today' : formatDate(day + 'T12:00:00');
-      list.append(el('span', { className: 'mother-event-day' }, dayLabel));
       for (const event of dayEvents) {
-        list.append(
-          el('div', { className: 'mother-event-item' },
+        body.append(
+          el('div', { className: 'card-table-row card-table-row--events' },
+            el('span', { className: 'mother-event-day-col' }, dayLabel),
             el('span', { className: 'mother-time-pill' }, formatTime(event.start_at)),
-            el('div', { className: 'mother-event-title' }, event.title)
+            el('span', { className: 'mother-event-title' }, event.title)
           )
         );
       }
@@ -170,24 +180,31 @@ export async function renderMotherHub(): Promise<void> {
   if (displayTasks.length === 0) {
     helpBody.append(el('p', { className: 'mother-empty-hint' }, 'No help scheduled yet.'));
   } else {
-    const list = el('div', { className: 'mother-help-list' });
+    const list = el('div', { className: 'mother-help-list card-table' },
+      el('div', { className: 'card-table-header' },
+        el('div', { className: 'card-table-row card-table-row--help' },
+          el('span', {}, ''),
+          el('span', {}, 'Who'),
+          el('span', {}, 'Task'),
+          el('span', {}, 'When')
+        )
+      ),
+      el('div', { className: 'card-table-body' })
+    );
+    const body = list.querySelector('.card-table-body')!;
     for (const task of displayTasks) {
       const helper = getTaskHelperLabel(task, profiles, assignments);
       const isOpen = helper === 'Looking for help';
-      list.append(
-        el('div', { className: 'mother-help-item' },
-          el('div', { className: 'mother-help-row' },
-            el('div', { className: `mother-avatar${isOpen ? ' mother-avatar--open' : ''}` },
-              isOpen ? '?' : getInitials(helper)
-            ),
-            el('div', { className: 'mother-help-content' },
-              el('div', { className: `mother-help-who${isOpen ? ' mother-help-who--open' : ''}` }, helper),
-              el('div', { className: 'mother-help-what' }, task.title),
-              task.due_at
-                ? el('div', { className: 'mother-help-when' }, formatDate(task.due_at))
-                : null
-            )
-          )
+      body.append(
+        el('div', { className: 'mother-help-item card-table-row card-table-row--help' },
+          el('div', { className: `mother-avatar${isOpen ? ' mother-avatar--open' : ''}` },
+            isOpen ? '?' : getInitials(helper)
+          ),
+          el('span', { className: `mother-help-who${isOpen ? ' mother-help-who--open' : ''}` }, helper),
+          el('span', { className: 'mother-help-what' }, task.title),
+          task.due_at
+            ? el('span', { className: 'mother-help-when' }, formatDate(task.due_at))
+            : el('span', { className: 'mother-help-when card-table-muted' }, '—')
         )
       );
     }

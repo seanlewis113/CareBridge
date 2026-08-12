@@ -2,6 +2,7 @@ import { api } from '../../shared/api';
 import { renderAdminShell } from '../shared/shell';
 import { el, formatDateTime, emptyState } from '../../shared/utils';
 import { icon } from '../../shared/icons';
+import { isActivityReverted, isRevertible, revertActivity } from '../../shared/revertActivity';
 import { PERSONA_LABELS, type ActivityLog } from '../../shared/types';
 
 const ACTION_LABELS: Record<string, string> = {
@@ -50,23 +51,33 @@ function formatActor(log: ActivityLog): string {
   return 'Unknown';
 }
 
-function formatDetails(log: ActivityLog): string | null {
+function formatDetails(log: ActivityLog): string {
   const meta = log.metadata;
-  if (!meta || Object.keys(meta).length === 0) return null;
+  if (!meta || Object.keys(meta).length === 0) return '—';
 
   if (typeof meta.title === 'string') return meta.title;
   if (typeof meta.name === 'string') return meta.name;
   if (typeof meta.body === 'string') return meta.body;
   if (typeof meta.email === 'string') return meta.email;
   if (typeof meta.detail === 'string') return meta.detail;
-  if (typeof meta.persona === 'string') return `Persona: ${PERSONA_LABELS[meta.persona as keyof typeof PERSONA_LABELS] ?? meta.persona}`;
+  if (typeof meta.persona === 'string') {
+    return `Persona: ${PERSONA_LABELS[meta.persona as keyof typeof PERSONA_LABELS] ?? meta.persona}`;
+  }
   if (typeof meta.count === 'number') return `${meta.count} items`;
   if (Array.isArray(meta.fields)) return `Fields: ${meta.fields.join(', ')}`;
+
+  const snapshot = meta.snapshot;
+  if (snapshot && typeof snapshot === 'object') {
+    const snap = snapshot as Record<string, unknown>;
+    if (typeof snap.title === 'string') return snap.title;
+    if (typeof snap.body === 'string') return snap.body;
+    if (typeof snap.name === 'string') return snap.name;
+  }
 
   const status = meta.status;
   if (typeof status === 'string') return `Status: ${status}`;
 
-  return null;
+  return '—';
 }
 
 export async function renderAdminActivity(): Promise<void> {
@@ -75,7 +86,7 @@ export async function renderAdminActivity(): Promise<void> {
   content.append(
     el('h2', {}, 'Activity Log'),
     el('p', { className: 'text-muted', style: 'margin-bottom:1rem' },
-      'A record of actions taken by all users in the app.'
+      'A record of actions taken by all users. Revertible actions can be undone from here.'
     )
   );
 
@@ -89,11 +100,25 @@ export async function renderAdminActivity(): Promise<void> {
         'Actions taken by users will appear here.'
       ));
     } else {
-      const list = el('div', { className: 'activity-log-list' });
+      const table = el('div', { className: 'card activity-log-table' },
+        el('div', { className: 'card-table' },
+          el('div', { className: 'card-table-header' },
+            el('div', { className: 'card-table-row card-table-row--activity' },
+              el('span', {}, 'Action'),
+              el('span', {}, 'Detail'),
+              el('span', {}, 'User'),
+              el('span', {}, 'Time'),
+              el('span', {}, '')
+            )
+          ),
+          el('div', { className: 'activity-log-list card-table-body', id: 'activity-log-body' })
+        )
+      );
+      const body = table.querySelector('#activity-log-body')!;
       for (const log of logs) {
-        list.append(renderActivityEntry(log));
+        body.append(renderActivityEntry(log));
       }
-      content.append(list);
+      content.append(table);
     }
   } catch (err) {
     console.error('Failed to load activity log:', err);
@@ -110,22 +135,49 @@ export async function renderAdminActivity(): Promise<void> {
 }
 
 function renderActivityEntry(log: ActivityLog): HTMLElement {
-  const details = formatDetails(log);
-  const card = el('div', { className: 'card activity-log-entry' },
-    el('div', { className: 'activity-log-header' },
-      el('div', { className: 'activity-log-icon' }, icon('activity')),
-      el('div', { className: 'activity-log-summary' },
-        el('p', { className: 'activity-log-action' }, formatAction(log.action)),
-        el('p', { className: 'activity-log-meta' },
-          `${formatActor(log)} · ${formatDateTime(log.created_at)}`
-        )
-      )
-    )
-  );
+  const reverted = isActivityReverted(log);
+  const canRevert = isRevertible(log);
+  const entry = el('div', {
+    className: `activity-log-entry card-table-row card-table-row--activity${reverted ? ' reverted' : ''}`,
+  });
 
-  if (details) {
-    card.append(el('p', { className: 'activity-log-details' }, details));
+  const actionCell = el('span', { style: 'font-weight:600' }, formatAction(log.action));
+  if (reverted) {
+    actionCell.append(el('span', {
+      className: 'card-table-muted',
+      style: 'margin-left:0.35rem;font-weight:500',
+    }, '(reverted)'));
   }
 
-  return card;
+  entry.append(
+    actionCell,
+    el('span', { className: 'card-table-muted' }, formatDetails(log)),
+    el('span', { className: 'card-table-muted' }, formatActor(log)),
+    el('span', { className: 'card-table-muted' }, formatDateTime(log.created_at)),
+    el('span', { className: 'card-table-actions' })
+  );
+
+  const actions = entry.querySelector('.card-table-actions')!;
+  if (canRevert) {
+    const btn = el('button', {
+      className: 'btn btn-secondary activity-log-revert-btn',
+      type: 'button',
+    }, 'Revert');
+    btn.addEventListener('click', async () => {
+      if (!confirm('Revert this action?')) return;
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        await revertActivity(log);
+        await renderAdminActivity();
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Revert';
+        alert(err instanceof Error ? err.message : 'Could not revert this action.');
+      }
+    });
+    actions.append(btn);
+  }
+
+  return entry;
 }

@@ -466,14 +466,84 @@ button, input, select, textarea {
 /* Lists */
 .list-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.75rem;
-  padding: 0.85rem 0;
+  padding: 0.4rem 0;
   border-bottom: 1px solid var(--color-border);
+  min-height: 0;
 }
 
 .list-item:last-child {
   border-bottom: none;
+}
+
+/* Compact table rows inside cards */
+.card-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.card-table-header .card-table-row {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0 0.35rem;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.card-table-row {
+  display: grid;
+  align-items: center;
+  gap: 0.35rem 0.65rem;
+  padding: 0.3rem 0;
+  min-height: 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.88rem;
+  line-height: 1.25;
+}
+
+.card-table-body .card-table-row:last-child,
+.card-table > .card-table-row:last-child {
+  border-bottom: none;
+}
+
+.card-table-row--help {
+  grid-template-columns: 2.25rem 1fr 1.35fr auto;
+}
+
+.card-table-row--events {
+  grid-template-columns: minmax(4.5rem, auto) minmax(3.5rem, auto) 1fr;
+}
+
+.card-table-row--tx {
+  grid-template-columns: minmax(4.5rem, auto) 1fr minmax(4rem, auto) minmax(4.5rem, auto);
+}
+
+.card-table-row--visit {
+  grid-template-columns: 88px minmax(0, 1fr);
+}
+
+.card-table-row--activity {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(4.5rem, auto) minmax(5.5rem, auto) auto;
+  gap: 0.35rem 0.75rem;
+}
+
+.card-table-label {
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.card-table-muted {
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+}
+
+.card-table-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.35rem;
 }
 
 .grid-2 {

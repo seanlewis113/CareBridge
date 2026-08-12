@@ -46,7 +46,12 @@ function renderNoteCard(
 
   for (const [label, value] of fields) {
     if (value) {
-      dl.append(el('dt', {}, label), el('dd', {}, value));
+      dl.append(
+        el('div', { className: 'card-table-row card-table-row--visit' },
+          el('dt', {}, label),
+          el('dd', {}, value)
+        )
+      );
     }
   }
 

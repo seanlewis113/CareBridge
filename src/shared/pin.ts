@@ -7,6 +7,14 @@ export const DEFAULT_ADMIN_SWITCH_PIN = '1023';
 
 const PIN_LENGTH = 4;
 
+function isPinRpcMissing(error: { code?: string; message?: string }): boolean {
+  const message = error.message ?? '';
+  return (
+    error.code === 'PGRST202' ||
+    /could not find the function|function .* does not exist/i.test(message)
+  );
+}
+
 export async function hashPin(pin: string): Promise<string> {
   const data = new TextEncoder().encode(pin);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -27,7 +35,12 @@ export async function verifyMotherPin(pin: string): Promise<boolean> {
   if (isSupabaseConfigured) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (getSupabase() as any).rpc('verify_mother_pin', { input_pin: pin });
-    if (error) throw error;
+    if (error) {
+      if (isPinRpcMissing(error)) {
+        return pin === DEFAULT_MOTHER_PIN;
+      }
+      throw error;
+    }
     return !!data;
   }
   const settings = await api.getSettings();
@@ -38,7 +51,12 @@ export async function verifyAdminSwitchPin(pin: string): Promise<boolean> {
   if (isSupabaseConfigured) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (getSupabase() as any).rpc('verify_admin_switch_pin', { input_pin: pin });
-    if (error) throw error;
+    if (error) {
+      if (isPinRpcMissing(error)) {
+        return pin === DEFAULT_ADMIN_SWITCH_PIN;
+      }
+      throw error;
+    }
     return !!data;
   }
   const settings = await api.getSettings();
