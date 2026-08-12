@@ -1,10 +1,9 @@
 import { api } from '../../shared/api';
-import { clearActivePersona } from '../../shared/auth';
-import { navigate } from '../../shared/router';
+import { clearActivePersona, isAuthenticated } from '../../shared/auth';
+import { navigate, MODULE_SELECT_PATH } from '../../shared/router';
 import { el, greeting, formatDate, formatTime, formatCurrency, showModal, timeOfDayClass, showToast } from '../../shared/utils';
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm } from './add-event';
-import { promptAdminSwitchPin } from '../../shared/pin';
 import type { CalendarEvent } from '../../shared/types';
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -561,19 +560,34 @@ function groupEventsByDay(events: { start_at: string; title: string }[]): [strin
   return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
+function scrollCalendarToToday(container: HTMLElement): void {
+  const todayCell = container.querySelector('.mother-calendar-day--today');
+  todayCell?.scrollIntoView({ block: 'center', inline: 'nearest' });
+}
+
 function showAllEventsCalendarModal(events: CalendarEvent[]): void {
   const now = new Date();
   const body = el('div', { className: 'mother-calendar-modal modal-body' });
+  const header = el('div', { className: 'mother-calendar-modal-header' });
   const subtitle = el(
     'p',
     { className: 'mother-calendar-modal-subtitle' },
     `${events.length} upcoming ${events.length === 1 ? 'event' : 'events'}`
   );
-  body.append(subtitle);
+  header.append(subtitle);
 
   if (events.length === 0) {
+    body.append(header);
     body.append(el('p', { className: 'mother-empty-hint' }, 'No events coming up.'));
   } else {
+    const todayBtn = el(
+      'button',
+      { className: 'mother-calendar-today-btn', type: 'button', 'aria-label': 'Jump to today' },
+      'Today'
+    );
+    todayBtn.addEventListener('click', () => scrollCalendarToToday(body));
+    header.append(todayBtn);
+    body.append(header);
     const byDay = new Map<string, CalendarEvent[]>();
     for (const event of events) {
       const day = event.start_at.slice(0, 10);
@@ -591,10 +605,9 @@ function showAllEventsCalendarModal(events: CalendarEvent[]): void {
 
   showModal('All Upcoming Events', body);
   body.closest('.modal')?.classList.add('mother-calendar-modal-shell');
-  requestAnimationFrame(() => {
-    const currentWeekCell = body.querySelector('.mother-calendar-day--current-week');
-    currentWeekCell?.scrollIntoView({ block: 'center', inline: 'nearest' });
-  });
+  if (events.length > 0) {
+    requestAnimationFrame(() => scrollCalendarToToday(body));
+  }
 }
 
 function buildMonthStarts(now: Date, events: CalendarEvent[]): Date[] {
@@ -711,10 +724,6 @@ function getTaskHelperLabel(
 }
 
 function showSwitchUserDialog(): void {
-  void (async () => {
-    const ok = await promptAdminSwitchPin();
-    if (!ok) return;
-    clearActivePersona();
-    await navigate('/');
-  })();
+  clearActivePersona();
+  void navigate(isAuthenticated() ? MODULE_SELECT_PATH : '/');
 }

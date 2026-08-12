@@ -262,7 +262,16 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['financial_access_log']['Insert']>;
       };
     };
-    Functions: Record<string, never>;
+    Functions: {
+      verify_mother_pin: {
+        Args: { input_pin: string };
+        Returns: boolean;
+      };
+      verify_admin_switch_pin: {
+        Args: { input_pin: string };
+        Returns: boolean;
+      };
+    };
     Enums: {
       persona_type: 'mother' | 'admin' | 'family_caregiver' | 'hired_caregiver';
       task_status: 'pending' | 'in_progress' | 'completed';

@@ -1,4 +1,5 @@
 import { api } from './api';
+import { getSupabase, isSupabaseConfigured } from './supabase';
 import { el, showModal } from './utils';
 
 export const DEFAULT_MOTHER_PIN = '1023';
@@ -23,11 +24,21 @@ async function pinMatches(storedHash: string | null, pin: string, defaultPin: st
 }
 
 export async function verifyMotherPin(pin: string): Promise<boolean> {
+  if (isSupabaseConfigured) {
+    const { data, error } = await getSupabase().rpc('verify_mother_pin', { input_pin: pin });
+    if (error) throw error;
+    return !!data;
+  }
   const settings = await api.getSettings();
   return pinMatches(settings.mother_pin_hash, pin, DEFAULT_MOTHER_PIN);
 }
 
 export async function verifyAdminSwitchPin(pin: string): Promise<boolean> {
+  if (isSupabaseConfigured) {
+    const { data, error } = await getSupabase().rpc('verify_admin_switch_pin', { input_pin: pin });
+    if (error) throw error;
+    return !!data;
+  }
   const settings = await api.getSettings();
   return pinMatches(settings.admin_switch_pin_hash, pin, DEFAULT_ADMIN_SWITCH_PIN);
 }
@@ -68,29 +79,72 @@ function promptPin(
       resolve(result);
     };
 
-    const trySubmit = async () => {
-      const pin = inputs.map((input) => input.value).join('');
-      if (pin.length !== PIN_LENGTH) return;
+    let submitting = false;
 
-      const ok = await verify(pin);
-      if (ok) {
-        void api.logActivity('auth.pin_verify', { metadata: { context: title } });
-        finish(true);
-        return;
-      }
-
-      void api.logActivity('auth.pin_fail', { metadata: { context: title } });
-      errorEl.textContent = 'Incorrect PIN. Try again.';
-      errorEl.style.display = 'block';
-      inputs.forEach((input) => {
-        input.value = '';
+    const clearPin = () => {
+      inputs.forEach((item) => {
+        item.value = '';
       });
       inputs[0].focus();
     };
 
+    const showPinError = (message: string) => {
+      void api.logActivity('auth.pin_fail', { metadata: { context: title } });
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+      clearPin();
+    };
+
+    const trySubmit = async () => {
+      const pin = inputs.map((input) => input.value).join('');
+      if (pin.length !== PIN_LENGTH || submitting) return;
+
+      submitting = true;
+      try {
+        const ok = await verify(pin);
+        if (ok) {
+          void api.logActivity('auth.pin_verify', { metadata: { context: title } });
+          finish(true);
+          return;
+        }
+        showPinError('Incorrect PIN. Try again.');
+      } catch {
+        showPinError('Unable to verify PIN. Try again.');
+      } finally {
+        submitting = false;
+      }
+    };
+
+    const fillDigits = (digits: string, startIndex = 0) => {
+      const normalized = digits.replace(/\D/g, '').slice(0, PIN_LENGTH);
+      normalized.split('').forEach((digit, offset) => {
+        const target = inputs[startIndex + offset];
+        if (target) target.value = digit;
+      });
+
+      const nextIndex = Math.min(startIndex + normalized.length, PIN_LENGTH - 1);
+      inputs[nextIndex]?.focus();
+
+      if (inputs.every((item) => item.value.length === 1)) {
+        void trySubmit();
+      }
+    };
+
     inputs.forEach((input, index) => {
+      input.addEventListener('focus', () => {
+        requestAnimationFrame(() => input.select());
+      });
+      input.addEventListener('click', () => {
+        input.select();
+      });
+      input.addEventListener('paste', (event) => {
+        event.preventDefault();
+        errorEl.style.display = 'none';
+        fillDigits(event.clipboardData?.getData('text') ?? '', index);
+      });
       input.addEventListener('input', () => {
         errorEl.style.display = 'none';
+        input.value = input.value.replace(/\D/g, '').slice(-1);
         if (input.value.length === 1 && index < PIN_LENGTH - 1) {
           inputs[index + 1].focus();
         }
