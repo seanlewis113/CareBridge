@@ -212,6 +212,21 @@ export async function signInAsPersona(persona: Persona): Promise<boolean> {
     return true;
   }
 
+  if (persona === 'family_caregiver' || persona === 'hired_caregiver') {
+    if (isAdminProfile()) {
+      session = {
+        persona,
+        profile: session.profile,
+        motherDeviceMode: false,
+        motherPinVerified: false,
+      };
+      saveSession();
+      syncActivityContext();
+      await api.logActivity('auth.persona_switch', { metadata: { persona, preview: true } });
+      return true;
+    }
+  }
+
   if (!session.profile || session.profile.persona !== persona) return false;
 
   session = {

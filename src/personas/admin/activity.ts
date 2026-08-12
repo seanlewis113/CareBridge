@@ -27,6 +27,7 @@ const ACTION_LABELS: Record<string, string> = {
   'task.delete': 'Deleted task',
   'task.assign': 'Assigned task',
   'task.unassign': 'Unassigned task',
+  'task.claim': 'Claimed task',
   'reminder.create': 'Created reminder',
   'reminder.update': 'Updated reminder',
   'reminder.delete': 'Deleted reminder',
@@ -56,6 +57,7 @@ function formatDetails(log: ActivityLog): string {
   if (!meta || Object.keys(meta).length === 0) return '—';
 
   if (typeof meta.title === 'string') return meta.title;
+  if (typeof meta.display_name === 'string') return meta.display_name;
   if (typeof meta.name === 'string') return meta.name;
   if (typeof meta.body === 'string') return meta.body;
   if (typeof meta.email === 'string') return meta.email;

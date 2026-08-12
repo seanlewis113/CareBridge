@@ -3,7 +3,7 @@ import { getSession } from '../../shared/auth';
 import { renderAdminShell } from '../shared/shell';
 import { createClockPickerField } from '../../shared/clock-picker';
 import { el, formatDate, showModal, confirmDialog } from '../../shared/utils';
-import type { Task, Profile } from '../../shared/types';
+import { PERSONA_LABELS, type Task, type Profile, type Persona } from '../../shared/types';
 
 export async function renderAdminTasks(): Promise<void> {
   const [tasks, profiles, assignments] = await Promise.all([
@@ -149,10 +149,10 @@ function createTaskForm(
   );
 
   const assignGroup = el('div', { className: 'form-group caregiver-select-group' },
-    el('label', { for: 'task-assign' }, 'Assign to caregivers'),
-    el('button', { type: 'button', id: 'task-assign-toggle', className: 'caregiver-select-toggle' }, 'Select caregivers'),
+    el('label', { for: 'task-assign' }, 'Assign to'),
+    el('button', { type: 'button', id: 'task-assign-toggle', className: 'caregiver-select-toggle' }, 'Select people'),
     el('div', { id: 'task-assign-menu', className: 'caregiver-select-menu', hidden: 'true' }),
-    el('small', { className: 'input-hint' }, 'Select one or more caregivers.')
+    el('small', { className: 'input-hint' }, 'Choose one or more people. Their names appear on Mom\'s dashboard.')
   );
   const assignToggle = assignGroup.querySelector('#task-assign-toggle') as HTMLButtonElement;
   const assignMenu = assignGroup.querySelector('#task-assign-menu') as HTMLDivElement;
@@ -165,13 +165,15 @@ function createTaskForm(
   const claimSelect = claimGroup.querySelector('#task-claimed-by') as HTMLSelectElement;
   claimSelect.append(el('option', { value: '' }, 'Unclaimed'));
   for (const caregiver of caregivers) {
-    claimSelect.append(el('option', { value: caregiver.id }, caregiver.display_name));
+    claimSelect.append(
+      el('option', { value: caregiver.id }, formatUserOptionLabel(caregiver))
+    );
   }
   claimSelect.value = existing?.claimed_by ?? '';
 
   const updateAssignLabel = () => {
     if (selectedCaregiverIds.size === 0) {
-      assignToggle.textContent = 'Select caregivers';
+      assignToggle.textContent = 'Select people';
       return;
     }
     const names = caregivers
@@ -198,7 +200,7 @@ function createTaskForm(
       'label',
       { className: 'caregiver-select-option' },
       el('input', { type: 'checkbox', value: p.id, checked: assignedIds.includes(p.id) ? 'true' : undefined }),
-      el('span', {}, p.display_name)
+      el('span', {}, formatUserOptionLabel(p))
     );
     const checkbox = row.querySelector('input') as HTMLInputElement;
     checkbox.addEventListener('change', () => {
@@ -213,7 +215,7 @@ function createTaskForm(
   }
   if (caregivers.length === 0) {
     assignToggle.disabled = true;
-    assignToggle.textContent = 'No caregivers available';
+    assignToggle.textContent = 'No people available';
     claimSelect.disabled = true;
   }
   updateAssignLabel();
@@ -236,9 +238,16 @@ function createTaskForm(
     const dueDate = val('task-due-date');
     const dueTime = val('task-due-time');
     const claimedBy = val('task-claimed-by') || null;
+    const showOnMotherHub = checked('task-mother-hub');
+    const isOpenSlot = checked('task-open');
 
     if (dueDate && !dueTime) {
       errorEl.textContent = 'Please select a due time, or clear the due date.';
+      errorEl.style.display = 'block';
+      return;
+    }
+    if (showOnMotherHub && !isOpenSlot && selectedCaregiverIds.size === 0 && !claimedBy) {
+      errorEl.textContent = 'Assign this task to someone, mark it as an open slot, or turn off "Show on mother dashboard".';
       errorEl.style.display = 'block';
       return;
     }
@@ -299,6 +308,11 @@ function createTaskForm(
   });
 
   return form;
+}
+
+function formatUserOptionLabel(profile: Profile): string {
+  const role = PERSONA_LABELS[profile.persona as Persona];
+  return `${profile.display_name} (${role})`;
 }
 
 function field(label: string, type: string, id: string, value: string, required = false): HTMLElement {

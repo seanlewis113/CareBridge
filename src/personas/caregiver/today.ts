@@ -88,9 +88,12 @@ function renderCaregiverTaskCard(
   );
 
   card.querySelector('.btn-secondary')?.addEventListener('click', async () => {
-    if (profileId) {
-      await api.updateTask(task.id, { claimed_by: profileId });
+    if (!profileId) return;
+    try {
+      await api.claimTask(task.id, profileId);
       await refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Unable to claim task');
     }
   });
 

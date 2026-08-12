@@ -39,14 +39,12 @@ export async function renderMotherHub(): Promise<void> {
   layout.append(skeleton);
   app.replaceChildren(layout);
 
-  const [settings, events, reminders, accounts, tasks, profiles, assignments] = await Promise.all([
+  const [settings, events, reminders, accounts, helpTasks] = await Promise.all([
     api.getSettings(),
     api.getCalendarEvents(nowIso),
     api.getReminders(),
     api.getFinancialAccounts(),
-    api.getTasks(),
-    api.getProfiles(),
-    api.getTaskAssignments(),
+    api.getMotherHubTasks(),
   ]);
 
   const chimeAccount = accounts.find(
@@ -54,13 +52,6 @@ export async function renderMotherHub(): Promise<void> {
   );
 
   const activeReminders = reminders.filter((r: import('../../shared/types').Reminder) => r.active && r.show_on_mother_hub);
-  const activeTasks = tasks
-    .filter((t: import('../../shared/types').Task) => t.status !== 'completed' && t.show_on_mother_hub !== false)
-    .sort((a, b) => {
-      if (!a.due_at) return 1;
-      if (!b.due_at) return -1;
-      return a.due_at.localeCompare(b.due_at);
-    });
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
   const todClass = timeOfDayClass();
@@ -176,7 +167,7 @@ export async function renderMotherHub(): Promise<void> {
     helpBody
   );
 
-  const displayTasks = activeTasks.slice(0, 4);
+  const displayTasks = helpTasks.slice(0, 4);
   if (displayTasks.length === 0) {
     helpBody.append(el('p', { className: 'mother-empty-hint' }, 'No help scheduled yet.'));
   } else {
@@ -193,7 +184,7 @@ export async function renderMotherHub(): Promise<void> {
     );
     const body = list.querySelector('.card-table-body')!;
     for (const task of displayTasks) {
-      const helper = getTaskHelperLabel(task, profiles, assignments);
+      const helper = task.helper_name ?? (task.open_slot ? 'Looking for help' : '—');
       const isOpen = helper === 'Looking for help';
       body.append(
         el('div', { className: 'mother-help-item card-table-row card-table-row--help' },
@@ -714,30 +705,6 @@ function isDateInCurrentWeek(date: Date, today: Date): boolean {
   const endOfWeek = new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate() + 7);
   const candidate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   return candidate >= startOfWeek && candidate < endOfWeek;
-}
-
-function getTaskHelperLabel(
-  task: import('../../shared/types').Task,
-  profiles: import('../../shared/types').Profile[],
-  assignments: import('../../shared/types').TaskAssignment[]
-): string {
-  if (task.claimed_by) {
-    const claimer = profiles.find((p) => p.id === task.claimed_by);
-    if (claimer) return claimer.display_name;
-  }
-
-  const assignedIds = assignments
-    .filter((a) => a.task_id === task.id)
-    .map((a) => a.profile_id);
-  const names = profiles
-    .filter((p) => assignedIds.includes(p.id))
-    .map((p) => p.display_name);
-
-  if (names.length === 1) return names[0];
-  if (names.length > 1) return names.join(' & ');
-
-  if (task.open_slot) return 'Looking for help';
-  return 'Family';
 }
 
 function showSwitchUserDialog(): void {

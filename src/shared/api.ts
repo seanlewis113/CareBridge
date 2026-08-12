@@ -11,6 +11,7 @@ import type {
   Persona,
   Profile,
   Reminder,
+  MotherHubTask,
   Task,
   TaskAssignment,
   Transaction,
@@ -67,6 +68,28 @@ function pickPrevious<T extends object>(before: T, updates: Partial<T>): Partial
     previous[key] = before[key];
   }
   return previous;
+}
+
+function resolveTaskHelperName(
+  task: Task,
+  profiles: Profile[],
+  assignments: TaskAssignment[]
+): string | null {
+  if (task.claimed_by) {
+    const claimer = profiles.find((p) => p.id === task.claimed_by);
+    if (claimer) return claimer.display_name;
+  }
+
+  const assignedIds = assignments
+    .filter((a) => a.task_id === task.id)
+    .map((a) => a.profile_id);
+  const names = profiles
+    .filter((p) => assignedIds.includes(p.id))
+    .map((p) => p.display_name);
+
+  if (names.length === 1) return names[0];
+  if (names.length > 1) return names.join(' & ');
+  return null;
 }
 
 export const api = {
@@ -400,6 +423,7 @@ export const api = {
   },
 
   async assignTask(taskId: string, profileId: string): Promise<TaskAssignment> {
+    const profile = await this.getProfile(profileId);
     const assignment: TaskAssignment = { id: crypto.randomUUID(), task_id: taskId, profile_id: profileId };
     if (isSupabaseConfigured) {
       const { data, error } = await db().from('task_assignments').insert(assignment).select().single();
@@ -407,15 +431,27 @@ export const api = {
       await this.logActivity('task.assign', {
         entityType: 'task',
         entityId: taskId,
-        metadata: { profile_id: profileId },
+        metadata: {
+          profile_id: profileId,
+          display_name: profile?.display_name ?? 'Unknown',
+        },
       });
       return data as TaskAssignment;
     }
     updateLocal('task_assignments', (items) => [...items, assignment]);
+    await this.logActivity('task.assign', {
+      entityType: 'task',
+      entityId: taskId,
+      metadata: {
+        profile_id: profileId,
+        display_name: profile?.display_name ?? 'Unknown',
+      },
+    });
     return assignment;
   },
 
   async unassignTask(taskId: string, profileId: string): Promise<void> {
+    const profile = await this.getProfile(profileId);
     if (isSupabaseConfigured) {
       const { error } = await db()
         .from('task_assignments')
@@ -426,13 +462,104 @@ export const api = {
       await this.logActivity('task.unassign', {
         entityType: 'task',
         entityId: taskId,
-        metadata: { profile_id: profileId },
+        metadata: {
+          profile_id: profileId,
+          display_name: profile?.display_name ?? 'Unknown',
+        },
       });
       return;
     }
     updateLocal('task_assignments', (items) =>
       items.filter((a) => !(a.task_id === taskId && a.profile_id === profileId))
     );
+    await this.logActivity('task.unassign', {
+      entityType: 'task',
+      entityId: taskId,
+      metadata: {
+        profile_id: profileId,
+        display_name: profile?.display_name ?? 'Unknown',
+      },
+    });
+  },
+
+  async claimTask(taskId: string, profileId: string): Promise<Task> {
+    const profile = await this.getProfile(profileId);
+    if (isSupabaseConfigured) {
+      const { data: before, error: beforeError } = await db().from('tasks').select('*').eq('id', taskId).single();
+      if (beforeError) throw beforeError;
+      const existing = before as Task;
+      if (existing.claimed_by && existing.claimed_by !== profileId) {
+        throw new Error('This task has already been claimed by someone else');
+      }
+      const { data, error } = await db()
+        .from('tasks')
+        .update({ claimed_by: profileId })
+        .eq('id', taskId)
+        .select()
+        .single();
+      if (error) throw error;
+      await this.logActivity('task.claim', {
+        entityType: 'task',
+        entityId: taskId,
+        metadata: {
+          profile_id: profileId,
+          display_name: profile?.display_name ?? 'Unknown',
+        },
+      });
+      return data as Task;
+    }
+
+    const tasks = getLocal('tasks');
+    const existing = tasks.find((t) => t.id === taskId);
+    if (!existing) throw new Error('Task not found');
+    if (existing.claimed_by && existing.claimed_by !== profileId) {
+      throw new Error('This task has already been claimed by someone else');
+    }
+    updateLocal('tasks', (items) =>
+      items.map((t) => (t.id === taskId ? { ...t, claimed_by: profileId } : t))
+    );
+    await this.logActivity('task.claim', {
+      entityType: 'task',
+      entityId: taskId,
+      metadata: {
+        profile_id: profileId,
+        display_name: profile?.display_name ?? 'Unknown',
+      },
+    });
+    return { ...existing, claimed_by: profileId };
+  },
+
+  async getMotherHubTasks(): Promise<MotherHubTask[]> {
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await db().rpc('get_mother_hub_tasks');
+        if (!error) return (data ?? []) as MotherHubTask[];
+      } catch {
+        // Fall back if migration not applied yet
+      }
+    }
+
+    const [tasks, profiles, assignments] = await Promise.all([
+      this.getTasks(),
+      this.getProfiles(),
+      this.getTaskAssignments(),
+    ]);
+
+    return tasks
+      .filter((t) => t.status !== 'completed' && t.show_on_mother_hub !== false)
+      .sort((a, b) => {
+        if (!a.due_at) return 1;
+        if (!b.due_at) return -1;
+        return a.due_at.localeCompare(b.due_at);
+      })
+      .map((task) => ({
+        id: task.id,
+        title: task.title,
+        due_at: task.due_at,
+        open_slot: task.open_slot,
+        helper_name: resolveTaskHelperName(task, profiles, assignments),
+      }))
+      .filter((task) => task.helper_name || task.open_slot);
   },
 
   async getReminders(): Promise<Reminder[]> {

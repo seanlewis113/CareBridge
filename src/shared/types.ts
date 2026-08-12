@@ -50,6 +50,14 @@ export interface TaskAssignment {
   profile_id: string;
 }
 
+export interface MotherHubTask {
+  id: string;
+  title: string;
+  due_at: string | null;
+  open_slot: boolean;
+  helper_name: string | null;
+}
+
 export interface Reminder {
   id: string;
   body: string;
