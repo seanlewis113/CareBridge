@@ -5,7 +5,7 @@ import './styles/mother.css';
 import './styles/admin.css';
 
 import { initRouter, registerRoute, navigate, getCurrentRoute } from './shared/router';
-import { isAdmin, isCaregiver, isMother, handleAuthSignedOut } from './shared/auth';
+import { isAdmin, isAdminProfile, isAuthenticated, isCaregiver, isMother, isMotherPinVerified, handleAuthSignedOut, getSession } from './shared/auth';
 import { isSupabaseConfigured, getSupabase } from './shared/supabase';
 import { renderLanding, renderModuleSelect } from './personas/landing';
 import { renderMotherHub } from './personas/mother/hub';
@@ -29,7 +29,7 @@ import { api } from './shared/api';
 import { mountVersionBadge } from './shared/version';
 
 async function guardMother(): Promise<boolean> {
-  if (!isMother()) {
+  if (!isMother() || !isMotherPinVerified()) {
     await navigate('/');
     return false;
   }
@@ -37,7 +37,7 @@ async function guardMother(): Promise<boolean> {
 }
 
 async function guardAdmin(): Promise<boolean> {
-  if (!isAdmin()) {
+  if (!isAdmin() || !isAuthenticated() || !isAdminProfile()) {
     await navigate('/');
     return false;
   }
@@ -45,7 +45,21 @@ async function guardAdmin(): Promise<boolean> {
 }
 
 async function guardCaregiver(): Promise<boolean> {
-  if (!isCaregiver()) {
+  if (!isCaregiver() || !isAuthenticated()) {
+    await navigate('/');
+    return false;
+  }
+
+  const { profile, persona } = getSession();
+  if (profile?.persona === 'admin') return true;
+  if (profile?.persona === persona) return true;
+
+  await navigate('/');
+  return false;
+}
+
+async function guardModuleSelect(): Promise<boolean> {
+  if (!isAuthenticated()) {
     await navigate('/');
     return false;
   }
@@ -54,7 +68,10 @@ async function guardCaregiver(): Promise<boolean> {
 
 function registerRoutes(): void {
   registerRoute('/', () => renderLanding());
-  registerRoute('/select', () => renderModuleSelect());
+  registerRoute('/select', async () => {
+    if (!(await guardModuleSelect())) return;
+    await renderModuleSelect();
+  });
 
   registerRoute('/mother', async () => {
     if (!(await guardMother())) return;

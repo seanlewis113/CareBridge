@@ -127,6 +127,7 @@ export interface SessionState {
   persona: Persona | null;
   profile: Profile | null;
   motherDeviceMode: boolean;
+  motherPinVerified?: boolean;
 }
 
 export interface ActivityLog {

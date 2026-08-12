@@ -1,9 +1,10 @@
 import { api } from '../../shared/api';
 import { clearActivePersona } from '../../shared/auth';
-import { navigate, MODULE_SELECT_PATH } from '../../shared/router';
+import { navigate } from '../../shared/router';
 import { el, greeting, formatDate, formatTime, formatCurrency, showModal, timeOfDayClass, showToast } from '../../shared/utils';
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm } from './add-event';
+import { promptAdminSwitchPin } from '../../shared/pin';
 import type { CalendarEvent } from '../../shared/types';
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -710,6 +711,10 @@ function getTaskHelperLabel(
 }
 
 function showSwitchUserDialog(): void {
-  clearActivePersona();
-  void navigate(MODULE_SELECT_PATH);
+  void (async () => {
+    const ok = await promptAdminSwitchPin();
+    if (!ok) return;
+    clearActivePersona();
+    await navigate('/');
+  })();
 }

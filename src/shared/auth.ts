@@ -22,19 +22,35 @@ function setSessionFromProfile(profile: Profile | null): void {
     persona: profile?.persona ?? null,
     profile,
     motherDeviceMode: false,
+    motherPinVerified: false,
   };
   saveSession();
   syncActivityContext();
 }
 
+function sanitizeSession(state: SessionState): SessionState {
+  if (state.persona === 'mother' && !state.motherPinVerified) {
+    return { persona: null, profile: state.profile, motherDeviceMode: false, motherPinVerified: false };
+  }
+
+  if (state.persona && state.persona !== 'mother' && !state.profile) {
+    return { persona: null, profile: null, motherDeviceMode: false, motherPinVerified: false };
+  }
+
+  return {
+    ...state,
+    motherPinVerified: state.persona === 'mother' ? !!state.motherPinVerified : false,
+  };
+}
+
 function loadSession(): SessionState {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
-    if (raw) return JSON.parse(raw) as SessionState;
+    if (raw) return sanitizeSession(JSON.parse(raw) as SessionState);
   } catch {
     // fall through
   }
-  return { persona: null, profile: null, motherDeviceMode: false };
+  return { persona: null, profile: null, motherDeviceMode: false, motherPinVerified: false };
 }
 
 function saveSession(): void {
@@ -154,26 +170,41 @@ export async function refreshSessionFromSupabase(): Promise<Profile | null> {
   return profile;
 }
 
+export async function signInAsMotherWithPin(): Promise<boolean> {
+  session = {
+    persona: 'mother',
+    profile: null,
+    motherDeviceMode: true,
+    motherPinVerified: true,
+  };
+  saveSession();
+  syncActivityContext();
+  await api.logActivity('auth.persona_switch', { metadata: { persona: 'mother' } });
+  return true;
+}
+
 export async function signInAsPersona(persona: Persona): Promise<boolean> {
   if (persona === 'mother') {
+    if (!isAdminProfile()) return false;
     session = {
       persona: 'mother',
-      profile: null,
-      motherDeviceMode: true,
+      profile: session.profile,
+      motherDeviceMode: false,
+      motherPinVerified: true,
     };
     saveSession();
     syncActivityContext();
-    await api.logActivity('auth.persona_switch', { metadata: { persona: 'mother' } });
+    await api.logActivity('auth.persona_switch', { metadata: { persona: 'mother', preview: true } });
     return true;
   }
 
   if (persona === 'admin') {
-    const profiles = await api.getProfiles();
-    const admin = profiles.find((p) => p.persona === 'admin');
+    if (!isAdminProfile()) return false;
     session = {
       persona: 'admin',
-      profile: admin ?? null,
+      profile: session.profile,
       motherDeviceMode: false,
+      motherPinVerified: false,
     };
     saveSession();
     syncActivityContext();
@@ -181,13 +212,13 @@ export async function signInAsPersona(persona: Persona): Promise<boolean> {
     return true;
   }
 
-  const profiles = await api.getProfiles();
-  const profile = profiles.find((p) => p.persona === persona);
-  if (!profile) return false;
+  if (!session.profile || session.profile.persona !== persona) return false;
+
   session = {
     persona,
-    profile,
+    profile: session.profile,
     motherDeviceMode: false,
+    motherPinVerified: false,
   };
   saveSession();
   syncActivityContext();
@@ -201,6 +232,7 @@ export function restorePersonaFromProfile(): boolean {
     ...session,
     persona: session.profile.persona,
     motherDeviceMode: false,
+    motherPinVerified: false,
   };
   saveSession();
   syncActivityContext();
@@ -212,6 +244,7 @@ export function clearActivePersona(): void {
     ...session,
     persona: null,
     motherDeviceMode: false,
+    motherPinVerified: false,
   };
   saveSession();
   syncActivityContext();
@@ -226,7 +259,7 @@ export function isAdminProfile(): boolean {
 }
 
 function clearSession(): void {
-  session = { persona: null, profile: null, motherDeviceMode: false };
+  session = { persona: null, profile: null, motherDeviceMode: false, motherPinVerified: false };
   saveSession();
   syncActivityContext();
 }
@@ -260,4 +293,8 @@ export function isCaregiver(): boolean {
 
 export function isMother(): boolean {
   return session.persona === 'mother';
+}
+
+export function isMotherPinVerified(): boolean {
+  return session.persona === 'mother' && session.motherPinVerified === true;
 }

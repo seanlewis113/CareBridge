@@ -2,6 +2,7 @@ import type { Persona } from '../shared/types';
 import { PERSONA_LABELS } from '../shared/types';
 import {
   signInAsPersona,
+  signInAsMotherWithPin,
   signInWithEmail,
   signUpWithEmail,
   signOut,
@@ -9,12 +10,14 @@ import {
   refreshSessionFromSupabase,
   isAdminProfile,
   isAuthenticated,
+  isMotherPinVerified,
   restorePersonaFromProfile,
 } from '../shared/auth';
 import { navigate, personaHome, MODULE_SELECT_PATH } from '../shared/router';
 import { el } from '../shared/utils';
 import { icon } from '../shared/icons';
 import { isSupabaseConfigured } from '../shared/supabase';
+import { promptMotherPin } from '../shared/pin';
 
 const PERSONA_CONFIG: { persona: Persona; iconName: 'home' | 'settings' | 'users' | 'briefcase'; desc: string }[] = [
   { persona: 'mother', iconName: 'home', desc: 'Your daily hub' },
@@ -32,7 +35,7 @@ export async function renderLanding(): Promise<void> {
     session = getSession();
   }
 
-  if (session.persona) {
+  if (session.persona && (session.persona !== 'mother' || isMotherPinVerified())) {
     await navigate(personaHome(session.persona));
     return;
   }
@@ -81,15 +84,22 @@ export async function renderLanding(): Promise<void> {
     icon('home'),
     "Mom's tablet"
   );
-  momTabletBtn.addEventListener('click', () => switchToPersona('mother'));
+  momTabletBtn.addEventListener('click', async () => {
+    const ok = await promptMotherPin();
+    if (!ok) return;
+    await signInAsMotherWithPin();
+    await navigate('/mother');
+  });
   altAccess.append(momTabletBtn);
 
-  const personaAccessBtn = el('button', { className: 'btn btn-ghost btn-block', type: 'button' },
-    icon('users'),
-    'Choose persona'
-  );
-  personaAccessBtn.addEventListener('click', () => navigate(MODULE_SELECT_PATH));
-  altAccess.append(personaAccessBtn);
+  if (isAuthenticated()) {
+    const personaAccessBtn = el('button', { className: 'btn btn-ghost btn-block', type: 'button' },
+      icon('users'),
+      'Choose persona'
+    );
+    personaAccessBtn.addEventListener('click', () => navigate(MODULE_SELECT_PATH));
+    altAccess.append(personaAccessBtn);
+  }
 
   footer.append(altAccess);
   container.append(hero, loginCard, footer);
@@ -99,6 +109,11 @@ export async function renderLanding(): Promise<void> {
 export async function renderModuleSelect(): Promise<void> {
   const app = document.getElementById('app')!;
   const session = getSession();
+
+  if (!isAuthenticated()) {
+    await navigate('/');
+    return;
+  }
 
   if (session.persona && !isAdminProfile()) {
     await navigate(personaHome(session.persona));

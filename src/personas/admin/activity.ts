@@ -10,6 +10,8 @@ const ACTION_LABELS: Record<string, string> = {
   'auth.persona_switch': 'Switched persona',
   'auth.invite_user': 'Invited user',
   'auth.pin_set': 'Updated PIN',
+  'auth.pin_verify': 'Verified PIN',
+  'auth.pin_fail': 'Failed PIN entry',
   'auth.financial_unlock': 'Unlocked financials',
   'auth.financial_lock': 'Locked financials',
   'settings.update': 'Updated settings',

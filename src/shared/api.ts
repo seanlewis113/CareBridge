@@ -43,8 +43,8 @@ function isMotherDeviceSession(): boolean {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return false;
-    const session = JSON.parse(raw) as { persona?: string };
-    return session.persona === 'mother';
+    const session = JSON.parse(raw) as { persona?: string; motherPinVerified?: boolean };
+    return session.persona === 'mother' && session.motherPinVerified === true;
   } catch {
     return false;
   }
