@@ -234,6 +234,11 @@
   overflow-y: auto;
 }
 
+.calendar-page-grid-scroll {
+  max-height: min(82dvh, 780px);
+  overflow-y: auto;
+}
+
 .mother-calendar-modal-header {
   display: flex;
   align-items: center;

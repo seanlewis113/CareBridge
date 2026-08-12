@@ -34,7 +34,7 @@ export async function renderAdminCalendar(): Promise<void> {
   content.append(statusEl, eventsContainer);
 
   const renderEvents = async () => {
-    const events = await api.getUpcomingEvents(30);
+    const events = await api.getCalendarEvents(new Date().toISOString());
     eventsContainer.replaceChildren();
 
     viewToggleHost.replaceChildren(renderCalendarViewToggle(viewMode, (mode) => {
@@ -55,7 +55,9 @@ export async function renderAdminCalendar(): Promise<void> {
     };
 
     if (viewMode === 'grid') {
-      eventsContainer.append(renderCalendarGridView(events, eventActions));
+      const gridScroll = el('div', { className: 'calendar-page-grid-scroll' });
+      gridScroll.append(renderCalendarGridView(events, eventActions));
+      eventsContainer.append(gridScroll);
       return;
     }
 
