@@ -634,6 +634,19 @@
   .card-table-row--admin-task {
     min-width: 36rem;
   }
+
+  .card-table-row--caregiver-task {
+    min-width: 30rem;
+  }
+
+  .caregiver-dash-check-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .caregiver-dash-check-row {
+    min-width: 26rem;
+  }
 }
 
 .task-form {
@@ -966,6 +979,287 @@
   }
 }
 
+.caregiver-dashboard {
+  max-width: 100%;
+}
+
+.caregiver-dash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.caregiver-dash-header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.caregiver-dash-header .btn .icon {
+  width: 1rem;
+  height: 1rem;
+  margin-right: 0.35rem;
+  vertical-align: -0.12em;
+}
+
+.caregiver-dash-stats {
+  margin-bottom: 0.85rem;
+  gap: 0.65rem;
+}
+
+.caregiver-dash-stats .stat-card {
+  padding: 0.65rem 0.85rem;
+}
+
+.caregiver-dash-stats .stat-card-icon {
+  width: 1.85rem;
+  height: 1.85rem;
+}
+
+.caregiver-dash-stats .stat-card-icon .icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.caregiver-dash-stats .value {
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.caregiver-dash-stats .label {
+  font-size: 0.78rem;
+}
+
+.stat-card-hint {
+  font-size: 0.72rem;
+  color: var(--color-warning, #b45309);
+  margin-top: 0.15rem;
+  font-weight: 600;
+}
+
+.caregiver-dash-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
+}
+
+@media (min-width: 640px) {
+  .caregiver-dash-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.caregiver-dash-panel {
+  padding: 0.7rem 0.85rem;
+  margin-bottom: 0;
+}
+
+.caregiver-dash-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.caregiver-dash-panel .card-header {
+  margin-bottom: 0;
+}
+
+.caregiver-dash-panel .card-header-icon {
+  width: 1.85rem;
+  height: 1.85rem;
+}
+
+.caregiver-dash-panel .card-header-icon .icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.caregiver-dash-panel .card-header h3 {
+  font-size: 0.95rem;
+}
+
+.caregiver-dash-view-all {
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.2rem 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.caregiver-dash-view-all:hover {
+  color: var(--color-primary-dark);
+}
+
+.caregiver-dash-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.35rem;
+}
+
+.caregiver-dash-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--color-border);
+  min-width: 0;
+}
+
+.caregiver-dash-row:last-child {
+  border-bottom: none;
+}
+
+.caregiver-dash-row--schedule {
+  padding: 0.3rem 0;
+}
+
+.caregiver-dash-row-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caregiver-dash-row-title-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.caregiver-dash-row-title-btn:hover {
+  color: var(--color-primary-dark);
+}
+
+.caregiver-dash-row-meta {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  max-width: 5.5rem;
+  text-align: right;
+  line-height: 1.2;
+}
+
+.caregiver-dash-row-meta--warn {
+  color: var(--color-warning, #b45309);
+  font-weight: 600;
+}
+
+.caregiver-dash-time {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  width: 3.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.caregiver-dash-row .btn {
+  flex-shrink: 0;
+  padding: 0.22rem 0.45rem;
+  font-size: 0.72rem;
+  min-height: auto;
+  line-height: 1.2;
+}
+
+.caregiver-dash-check-table {
+  margin-top: 0.35rem;
+}
+
+.caregiver-dash-check-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.caregiver-dash-check-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 6.75rem 3.75rem 4.25rem 5.25rem;
+  column-gap: 0.65rem;
+  align-items: center;
+  padding: 0.32rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.caregiver-dash-check-row--head {
+  font-weight: 600;
+  color: rgba(107, 93, 77, 0.48);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.caregiver-dash-check-row--head > span {
+  font-size: 0.65rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.caregiver-dash-check-row:last-child {
+  border-bottom: none;
+}
+
+.caregiver-dash-check-row > span {
+  min-width: 0;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.caregiver-dash-check-col-check {
+  text-align: left;
+}
+
+.caregiver-dash-check-col-date {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.caregiver-dash-check-col-by {
+  text-align: left;
+}
+
+.caregiver-dash-check-col-days {
+  text-align: left;
+}
+
+.caregiver-dash-check-col-action {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.caregiver-dash-check-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caregiver-dash-check-warn {
+  color: var(--color-warning, #b45309);
+  font-weight: 600;
+}
+
+.caregiver-dash-empty {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  margin: 0.15rem 0 0;
+  line-height: 1.35;
+}
+
 .caregiver-cta {
   margin-bottom: 1.5rem;
 }
@@ -1036,6 +1330,10 @@
   padding: 0.65rem 1rem;
 }
 
+.activity-log-list .card-table-row {
+  padding: 0.45rem 0;
+}
+
 .activity-log-entry {
   padding: 0;
   border: none;
@@ -1043,13 +1341,171 @@
   background: transparent;
 }
 
-.activity-log-entry.reverted .card-table-row {
+.activity-log-entry.reverted {
   opacity: 0.55;
 }
 
-.activity-log-revert-btn {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.55rem;
+.activity-log-table .card-table-actions {
+  justify-content: flex-end;
+  align-items: center;
+  min-width: 0;
+}
+
+.activity-log-table .card-table-actions .btn {
   min-height: auto;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.72rem;
   line-height: 1.2;
+  white-space: nowrap;
+  border-width: 1px;
+}
+
+/* Admin one-page dashboard */
+@media (min-width: 900px) {
+  .app-content:has(.admin-dashboard) {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 1rem;
+  }
+
+  .app-shell-body:has(.admin-dashboard) {
+    overflow: hidden;
+  }
+}
+
+.admin-dashboard {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  max-width: 100%;
+}
+
+@media (min-width: 900px) {
+  .admin-dashboard {
+    overflow: hidden;
+  }
+
+  .admin-dashboard .caregiver-dash-header {
+    margin-bottom: 0.65rem;
+    flex-shrink: 0;
+  }
+
+  .admin-dashboard .caregiver-dash-stats {
+    margin-bottom: 0.65rem;
+    flex-shrink: 0;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .admin-dashboard .admin-dash-alert {
+    flex-shrink: 0;
+    margin-bottom: 0.5rem;
+  }
+
+  .admin-dashboard .admin-dash-grid {
+    flex: 1;
+    min-height: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .admin-dashboard .caregiver-dash-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    margin-bottom: 0;
+  }
+
+  .admin-dashboard .caregiver-dash-list,
+  .admin-dashboard .caregiver-dash-check-table {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
+
+.admin-dash-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius);
+  background: #fff8eb;
+  border: 1px solid #f0d9a8;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--color-text);
+}
+
+.admin-dash-alert .icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  color: var(--color-warning, #b45309);
+}
+
+.admin-dash-alert strong {
+  color: var(--color-warning, #b45309);
+}
+
+.caregiver-dash-check-grid--readonly .caregiver-dash-check-row {
+  grid-template-columns: minmax(0, 1.5fr) 6.75rem 3.75rem 4.25rem;
+}
+
+.admin-dash-activity-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) 4.5rem 5.5rem;
+  column-gap: 0.45rem;
+  align-items: center;
+}
+
+.admin-dash-activity-action {
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.admin-dash-activity-detail {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.admin-dash-activity-time {
+  width: auto;
+  min-width: 0;
+  text-align: right;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 899px) {
+  .admin-dashboard .caregiver-dash-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-dash-activity-row {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+  }
+
+  .admin-dash-activity-detail {
+    grid-column: 1 / -1;
+  }
+
+  .admin-dash-activity-time {
+    grid-row: 1;
+    grid-column: 2;
+  }
 }

@@ -16,6 +16,29 @@ export function formatDateTime(dateStr: string): string {
   return `${formatDate(dateStr)} at ${formatTime(dateStr)}`;
 }
 
+export function daysSince(dateStr: string): number {
+  const then = new Date(dateStr);
+  const now = new Date();
+  const thenDay = new Date(then.getFullYear(), then.getMonth(), then.getDate());
+  const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.floor((nowDay.getTime() - thenDay.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export function daysSinceLabel(dateStr: string): string {
+  const days = daysSince(dateStr);
+  if (days === 0) return 'today';
+  if (days === 1) return '1 day ago';
+  return `${days} days ago`;
+}
+
+export function formatRelativeTime(dateStr: string): string {
+  const days = daysSince(dateStr);
+  if (days === 0) return formatTime(dateStr);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  return formatDate(dateStr);
+}
+
 export function greeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good morning';

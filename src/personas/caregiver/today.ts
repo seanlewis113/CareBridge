@@ -2,111 +2,144 @@ import { api } from '../../shared/api';
 import { getSession } from '../../shared/auth';
 import { renderCaregiverShell } from '../shared/shell';
 import { navigate } from '../../shared/router';
-import { el, formatTime, emptyState } from '../../shared/utils';
+import { el, formatTime } from '../../shared/utils';
 import { icon } from '../../shared/icons';
 import { ensureTaskRealtime } from '../../shared/realtime';
 import { taskHasAssignees } from '../../shared/taskAssignments';
-import { renderCaregiverTaskCard } from './taskCard';import { renderRecurringChecksSection } from './recurringChecks';
+import { renderCaregiverDashTaskPanel, sortCaregiverTasks } from './taskTable';
+import { renderRecurringChecksSection } from './recurringChecks';
+import type { CalendarEvent } from '../../shared/types';
 
 export async function renderCaregiverToday(): Promise<void> {
   const session = getSession();
   const profileId = session.profile?.id;
 
-  const [events, tasks, assignments] = await Promise.all([
+  const [events, tasks, assignments, checks] = await Promise.all([
     api.getUpcomingEvents(3),
     api.getTasks(),
     api.getTaskAssignments(),
+    api.getRecurringChecksWithStatus(),
   ]);
 
   const myTaskIds = new Set(
     assignments.filter((a) => a.profile_id === profileId).map((a) => a.task_id)
   );
-  const assignedTasks = tasks.filter(
-    (t) => myTaskIds.has(t.id) && t.status !== 'completed'
+  const assignedTasks = sortCaregiverTasks(
+    tasks.filter((t) => myTaskIds.has(t.id) && t.status !== 'completed'),
+    { search: '', statuses: new Set(['pending', 'in_progress']), sortKey: 'due', sortDir: 'asc' }
   );
-  const availableTasks = tasks.filter(
-    (t) => t.open_slot && !taskHasAssignees(t.id, assignments) && t.status !== 'completed'
+  const availableTasks = sortCaregiverTasks(
+    tasks.filter(
+      (t) => t.open_slot && !taskHasAssignees(t.id, assignments) && t.status !== 'completed'
+    ),
+    { search: '', statuses: new Set(['pending', 'in_progress']), sortKey: 'due', sortDir: 'asc' }
   );
   const today = new Date().toISOString().slice(0, 10);
   const todayEvents = events.filter((e) => e.start_at.startsWith(today));
+  const uncheckedChecks = checks.filter((c) => !c.last_completion).length;
 
-  const content = el('div', {});
+  const refresh = () => renderCaregiverToday();
 
-  const logVisitBtn = el('button', { className: 'btn btn-primary btn-lg', type: 'button' },
+  const content = el('div', { className: 'caregiver-dashboard' });
+
+  const logVisitBtn = el('button', { className: 'btn btn-primary', type: 'button' },
     icon('pen-line'),
-    'Log Visit Notes'
+    'Log Visit'
   );
   logVisitBtn.addEventListener('click', () => navigate('/caregiver/visit'));
-  content.append(el('div', { className: 'caregiver-cta' }, logVisitBtn));
 
-  content.append(await renderRecurringChecksSection(() => renderCaregiverToday()));
-
-  content.append(el('h2', { className: 'section-title' }, icon('calendar'), 'Today\'s Schedule'));
-  if (todayEvents.length === 0) {
-    content.append(emptyState(
-      icon('sun'),
-      'Free day',
-      'No events scheduled for today.'
-    ));
-  } else {
-    const card = el('div', { className: 'card' });
-    const timeline = el('div', { className: 'timeline' });
-    for (const event of todayEvents) {
-      timeline.append(
-        el('div', { className: 'timeline-item' },
-          el('div', { className: 'timeline-time' }, formatTime(event.start_at)),
-          el('div', { className: 'timeline-title' }, event.title)
-        )
-      );
-    }
-    card.append(timeline);
-    content.append(card);
-  }
-
-  content.append(el('h2', { className: 'section-title' }, icon('clipboard-list'), 'My Tasks'));
-  if (assignedTasks.length === 0) {
-    content.append(emptyState(
-      icon('check-circle'),
-      'All caught up',
-      'No tasks assigned. Check back later.'
-    ));
-  } else {
-    const taskList = el('div', { className: 'caregiver-task-list' });
-    for (const task of assignedTasks) {
-      taskList.append(
-        renderCaregiverTaskCard(task, {
-          profileId,
-          refresh: () => renderCaregiverToday(),
-        })
-      );
-    }
-    content.append(taskList);
-  }
-
-  content.append(el('h2', { className: 'section-title' }, icon('users'), 'Available to Claim'));
-  if (availableTasks.length === 0) {
-    content.append(emptyState(
-      icon('check-circle'),
-      'Nothing open',
-      'No unclaimed tasks right now.'
-    ));
-  } else {
-    const taskList = el('div', { className: 'caregiver-task-list' });
-    for (const task of availableTasks) {
-      taskList.append(
-        renderCaregiverTaskCard(task, {
-          profileId,
-          refresh: () => renderCaregiverToday(),
-          showClaim: true,
-          isUnassigned: !taskHasAssignees(task.id, assignments),
-        })      );
-    }
-    content.append(taskList);
-  }
+  content.append(
+    el('div', { className: 'caregiver-dash-header' },
+      el('h2', {}, 'Today'),
+      logVisitBtn
+    ),
+    el('div', { className: 'dashboard-stats caregiver-dash-stats' },
+      statCard(String(assignedTasks.length), 'My tasks', '/caregiver/tasks', 'clipboard-list'),
+      statCard(String(availableTasks.length), 'Open slots', '/caregiver/tasks', 'users'),
+      statCard(String(todayEvents.length), 'Events today', '/caregiver/calendar', 'calendar'),
+      statCard(String(checks.length), 'Recurring checks', '/caregiver/visit', 'list',
+        uncheckedChecks > 0 ? `${uncheckedChecks} unchecked` : undefined)
+    ),
+    el('div', { className: 'caregiver-dash-grid' },
+      renderSchedulePanel(todayEvents),
+      renderCaregiverDashTaskPanel({
+        iconName: 'clipboard-list',
+        title: 'My Tasks',
+        tasks: assignedTasks,
+        max: 4,
+        viewAllPath: '/caregiver/tasks',
+        profileId,
+        refresh,
+        emptyText: 'All caught up — no tasks assigned.',
+      }),
+      await renderRecurringChecksSection(refresh, { compact: true, max: 4 }),
+      renderCaregiverDashTaskPanel({
+        iconName: 'users',
+        title: 'Available to Claim',
+        tasks: availableTasks,
+        max: 3,
+        viewAllPath: '/caregiver/tasks',
+        profileId,
+        refresh,
+        showClaim: true,
+        isUnassigned: (task) => !taskHasAssignees(task.id, assignments),
+        emptyText: 'No open tasks to claim.',
+      })
+    )
+  );
 
   renderCaregiverShell(content, '/caregiver');
   ensureTaskRealtime(() => {
-    void renderCaregiverToday();
+    void refresh();
   });
 }
 
+function statCard(
+  value: string,
+  label: string,
+  path: string,
+  iconName: string,
+  hint?: string
+): HTMLElement {
+  const card = el('button', { type: 'button', className: 'stat-card stat-card-link' },
+    el('div', { className: 'stat-card-header' },
+      el('div', { className: 'stat-card-icon' }, icon(iconName))
+    ),
+    el('div', { className: 'value' }, value),
+    el('div', { className: 'label' }, label),
+    hint ? el('div', { className: 'stat-card-hint' }, hint) : null
+  );
+  card.addEventListener('click', () => navigate(path));
+  return card;
+}
+
+function renderSchedulePanel(events: CalendarEvent[]): HTMLElement {
+  const panel = el('section', { className: 'card caregiver-dash-panel' });
+  const head = el('div', { className: 'caregiver-dash-panel-head' },
+    el('div', { className: 'card-header' },
+      el('div', { className: 'card-header-icon' }, icon('calendar')),
+      el('h3', {}, 'Today\'s Schedule')
+    )
+  );
+  const viewAll = el('button', { type: 'button', className: 'caregiver-dash-view-all' }, 'Calendar');
+  viewAll.addEventListener('click', () => navigate('/caregiver/calendar'));
+  head.append(viewAll);
+  panel.append(head);
+
+  if (events.length === 0) {
+    panel.append(el('p', { className: 'caregiver-dash-empty' }, 'No events scheduled today.'));
+    return panel;
+  }
+
+  const list = el('div', { className: 'caregiver-dash-list' });
+  for (const event of events) {
+    list.append(
+      el('div', { className: 'caregiver-dash-row caregiver-dash-row--schedule' },
+        el('span', { className: 'caregiver-dash-time' }, formatTime(event.start_at)),
+        el('span', { className: 'caregiver-dash-row-title' }, event.title)
+      )
+    );
+  }
+  panel.append(list);
+  return panel;
+}
