@@ -12,6 +12,7 @@ import {
 import { el, greeting, formatDate, formatTime, formatCurrency, showModal, timeOfDayClass, showToast } from '../../shared/utils';
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm } from './add-event';
+import { ensureMotherHubRealtime, teardownMotherHubRealtime } from '../../shared/realtime';
 import type { CalendarEvent } from '../../shared/types';
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -254,6 +255,15 @@ export async function renderMotherHub(): Promise<void> {
   document.getElementById('switch-user-btn')?.addEventListener('click', () => showSwitchUserDialog());
 
   setupIdleTimer();
+  ensureMotherHubRealtime(() => {
+    void renderMotherHub();
+  });
+}
+
+export function teardownMotherHub(): void {
+  teardownMotherHubRealtime();
+  idleCleanup?.();
+  idleCleanup = null;
 }
 
 function setupIdleTimer(): void {

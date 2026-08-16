@@ -3,6 +3,8 @@ import { getSession } from '../../shared/auth';
 import { renderCaregiverShell } from '../shared/shell';
 import { el, todayISO } from '../../shared/utils';
 import { navigate } from '../../shared/router';
+import { ensureTaskRealtime } from '../../shared/realtime';
+import { renderRecurringChecksSection } from './recurringChecks';
 
 export async function renderCaregiverVisitForm(): Promise<void> {
   const session = getSession();
@@ -12,7 +14,8 @@ export async function renderCaregiverVisitForm(): Promise<void> {
     el('h2', {}, 'Log Visit'),
     el('p', { style: 'color:var(--color-text-muted);margin-bottom:1rem' },
       'Document what happened during your visit so the family stays informed.'
-    )
+    ),
+    await renderRecurringChecksSection(() => renderCaregiverVisitForm())
   );
 
   const form = el('form', { className: 'card' });
@@ -59,6 +62,9 @@ export async function renderCaregiverVisitForm(): Promise<void> {
 
   content.append(form);
   renderCaregiverShell(content, '/caregiver/visit');
+  ensureTaskRealtime(() => {
+    void renderCaregiverVisitForm();
+  });
 }
 
 function field(

@@ -58,6 +58,28 @@ export interface MotherHubTask {
   helper_name: string | null;
 }
 
+export interface RecurringCheck {
+  id: string;
+  title: string;
+  description: string | null;
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface RecurringCheckCompletion {
+  id: string;
+  check_id: string;
+  completed_by: string;
+  completed_at: string;
+  notes: string | null;
+  completed_by_profile?: Profile;
+}
+
+export interface RecurringCheckWithStatus extends RecurringCheck {
+  last_completion: RecurringCheckCompletion | null;
+}
+
 export interface Reminder {
   id: string;
   body: string;

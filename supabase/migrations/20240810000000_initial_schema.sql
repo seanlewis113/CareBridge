@@ -1,4 +1,4 @@
--- Mom's Care database schema
+-- Jeanne's Care Bridge database schema
 
 CREATE TYPE persona_type AS ENUM ('mother', 'admin', 'family_caregiver', 'hired_caregiver');
 CREATE TYPE task_status AS ENUM ('pending', 'in_progress', 'completed');

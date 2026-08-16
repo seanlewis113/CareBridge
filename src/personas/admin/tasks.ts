@@ -3,8 +3,8 @@ import { getSession } from '../../shared/auth';
 import { renderAdminShell } from '../shared/shell';
 import { createClockPickerField } from '../../shared/clock-picker';
 import { el, formatDate, showModal, confirmDialog } from '../../shared/utils';
-import { PERSONA_LABELS, type Task, type Profile, type Persona } from '../../shared/types';
-
+import { PERSONA_LABELS, type Task, type Profile, type Persona, type TaskAssignment } from '../../shared/types';
+import { getTaskAssigneeIds } from '../../shared/taskAssignments';
 export async function renderAdminTasks(): Promise<void> {
   const [tasks, profiles, assignments] = await Promise.all([
     api.getTasks(),
@@ -20,7 +20,7 @@ export async function renderAdminTasks(): Promise<void> {
     )
   );
 
-  const list = el('div', {});
+  const list = el('div', { className: 'admin-task-list' });
   if (tasks.length === 0) {
     list.append(el('p', { className: 'empty-state' }, 'No tasks yet. Create one to assign to caregivers.'));
   } else {
@@ -44,59 +44,19 @@ export async function renderAdminTasks(): Promise<void> {
 function renderTaskCard(
   task: Task,
   profiles: Profile[],
-  assignments: { task_id: string; profile_id: string }[],
+  assignments: TaskAssignment[],
   refresh: () => void
-): HTMLElement {
-  const assignedIds = assignments.filter((a) => a.task_id === task.id).map((a) => a.profile_id);
+): HTMLElement {  const assignedIds = getTaskAssigneeIds(task.id, assignments);
   const assignedNames = profiles.filter((p) => assignedIds.includes(p.id)).map((p) => p.display_name);
-
-  const badges = el(
-    'div',
-    { className: 'task-card-badges' },
-    el('span', { className: `badge badge-${task.status === 'completed' ? 'completed' : 'pending'}` }, task.status),
-    task.open_slot ? el('span', { className: 'badge badge-pending' }, 'Open slot') : null,
-    task.visit_specific ? el('span', { className: 'badge task-badge-visit' }, 'Visit task') : null,
-    task.show_on_mother_hub ? el('span', { className: 'badge badge-completed' }, 'Mother dashboard') : null,
-  );
-
-  const titleCol = el('div', { className: 'task-main-col' },
-    el('h3', { className: 'task-card-title' }, task.title),
-    task.description ? el('p', { className: 'task-card-description' }, task.description) : null
-  );
-
-  const metaRows = el(
-    'dl',
-    { className: 'task-card-meta' },
-    task.due_at ? el('div', { className: 'task-meta-row' }, el('dt', {}, 'Due'), el('dd', {}, formatDate(task.due_at))) : null,
-    assignedNames.length > 0 ? el('div', { className: 'task-meta-row' }, el('dt', {}, 'Assigned'), el('dd', {}, assignedNames.join(', '))) : null,
-    task.claimed_by ? el('div', { className: 'task-meta-row' }, el('dt', {}, 'Claimed by'), el('dd', {}, profiles.find((p) => p.id === task.claimed_by)?.display_name ?? 'Someone')) : null,
-  );
-
-  const rightCol = el(
-    'div',
-    { className: 'task-side-col' },
-    badges,
-    metaRows,
-  );
-
-  const card = el('div', { className: 'card task-card' },
-    el('div', { className: 'task-card-top' }, titleCol, rightCol),
-  );
-
-  if (task.checklist.length > 0) {
-    const checklist = el('div', { style: 'margin-top:0.5rem' });
-    for (const item of task.checklist) {
-      checklist.append(
-        el('div', { className: 'checklist-item' },
-          el('input', { type: 'checkbox', checked: item.done ? 'true' : undefined, disabled: 'true' }),
-          item.text
-        )
-      );
-    }
-    card.append(checklist);
+  const flagBadges = el('div', { className: 'task-card-flag-badges' });
+  if (task.open_slot) flagBadges.append(el('span', { className: 'badge badge-pending' }, 'Open slot'));
+  if (task.visit_specific) flagBadges.append(el('span', { className: 'badge task-badge-visit' }, 'Visit'));
+  if (task.show_on_mother_hub) flagBadges.append(el('span', { className: 'badge badge-completed' }, 'Mom hub'));
+  if (flagBadges.childElementCount === 0) {
+    flagBadges.append(el('span', { className: 'card-table-muted' }, '—'));
   }
 
-  const actions = el('div', { className: 'task-actions' },
+  const actions = el('div', { className: 'card-table-actions' },
     el('button', { className: 'btn btn-secondary', type: 'button' }, 'Edit'),
     el('button', { className: 'btn btn-danger', type: 'button' }, 'Delete')
   );
@@ -113,8 +73,60 @@ function renderTaskCard(
     }
   });
 
-  card.append(actions);
-  return card;
+  const header = el('div', { className: 'task-card-header' },
+    el('h3', { className: 'task-card-title' }, task.title),
+    actions
+  );
+
+  const cardChildren: HTMLElement[] = [header];
+
+  if (task.description) {
+    cardChildren.push(el('p', { className: 'task-card-description' }, task.description));
+  }
+
+  const table = el('div', { className: 'card-table task-card-table' },
+    el('div', { className: 'card-table-header' },
+      el('div', { className: 'card-table-row card-table-row--admin-task' },
+        el('span', {}, 'Status'),
+        el('span', {}, 'Assigned'),
+        el('span', {}, 'Due'),
+        el('span', {}, 'Flags')
+      )
+    ),
+    el('div', { className: 'card-table-body' },
+      el('div', { className: 'card-table-row card-table-row--admin-task' },
+        el('span', {},
+          el('span', { className: `badge badge-${task.status === 'completed' ? 'completed' : 'pending'}` }, task.status)
+        ),
+        el('span', {},
+          assignedNames.length > 0
+            ? assignedNames.join(', ')
+            : el('span', { className: 'card-table-muted' }, 'Unassigned')
+        ),
+        el('span', {},          task.due_at
+            ? formatDate(task.due_at)
+            : el('span', { className: 'card-table-muted' }, '—')
+        ),
+        el('span', {}, flagBadges)
+      )
+    )
+  );
+  cardChildren.push(table);
+
+  if (task.checklist.length > 0) {
+    const checklist = el('div', { className: 'task-card-checklist' });
+    for (const item of task.checklist) {
+      checklist.append(
+        el('div', { className: 'checklist-item checklist-item--compact' },
+          el('input', { type: 'checkbox', checked: item.done ? 'true' : undefined, disabled: 'true' }),
+          item.text
+        )
+      );
+    }
+    cardChildren.push(checklist);
+  }
+
+  return el('div', { className: 'card task-card' }, ...cardChildren);
 }
 
 function createTaskForm(
@@ -158,21 +170,8 @@ function createTaskForm(
   const assignMenu = assignGroup.querySelector('#task-assign-menu') as HTMLDivElement;
   const caregivers = profiles.filter((p) => p.persona !== 'mother');
   const selectedCaregiverIds = new Set(assignedIds);
-  const claimGroup = el('div', { className: 'form-group' },
-    el('label', { for: 'task-claimed-by' }, 'Claimed by'),
-    el('select', { id: 'task-claimed-by' })
-  );
-  const claimSelect = claimGroup.querySelector('#task-claimed-by') as HTMLSelectElement;
-  claimSelect.append(el('option', { value: '' }, 'Unclaimed'));
-  for (const caregiver of caregivers) {
-    claimSelect.append(
-      el('option', { value: caregiver.id }, formatUserOptionLabel(caregiver))
-    );
-  }
-  claimSelect.value = existing?.claimed_by ?? '';
 
-  const updateAssignLabel = () => {
-    if (selectedCaregiverIds.size === 0) {
+  const updateAssignLabel = () => {    if (selectedCaregiverIds.size === 0) {
       assignToggle.textContent = 'Select people';
       return;
     }
@@ -216,11 +215,9 @@ function createTaskForm(
   if (caregivers.length === 0) {
     assignToggle.disabled = true;
     assignToggle.textContent = 'No people available';
-    claimSelect.disabled = true;
   }
   updateAssignLabel();
-  form.append(assignGroup, claimGroup);
-
+  form.append(assignGroup);
   const checklistGroup = el('div', { className: 'form-group' },
     el('label', { for: 'task-checklist' }, 'Checklist items (one per line)'),
     el('textarea', { id: 'task-checklist', placeholder: 'Check milk\nBuy fruit' },
@@ -237,17 +234,14 @@ function createTaskForm(
     const title = val('task-title');
     const dueDate = val('task-due-date');
     const dueTime = val('task-due-time');
-    const claimedBy = val('task-claimed-by') || null;
-    const showOnMotherHub = checked('task-mother-hub');
-    const isOpenSlot = checked('task-open');
+    const showOnMotherHub = checked('task-mother-hub');    const isOpenSlot = checked('task-open');
 
     if (dueDate && !dueTime) {
       errorEl.textContent = 'Please select a due time, or clear the due date.';
       errorEl.style.display = 'block';
       return;
     }
-    if (showOnMotherHub && !isOpenSlot && selectedCaregiverIds.size === 0 && !claimedBy) {
-      errorEl.textContent = 'Assign this task to someone, mark it as an open slot, or turn off "Show on mother dashboard".';
+    if (showOnMotherHub && !isOpenSlot && selectedCaregiverIds.size === 0) {      errorEl.textContent = 'Assign this task to someone, mark it as an open slot, or turn off "Show on mother dashboard".';
       errorEl.style.display = 'block';
       return;
     }
@@ -270,9 +264,8 @@ function createTaskForm(
       status: existing?.status ?? 'pending' as const,
       checklist,
       created_by: session.profile?.id ?? null,
-      claimed_by: claimedBy,
+      claimed_by: null,
     };
-
     try {
       let taskId = existing?.id;
       if (existing) {

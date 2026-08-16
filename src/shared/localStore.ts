@@ -7,6 +7,8 @@ export interface LocalDataStore {
   tasks: import('./types').Task[];
   task_assignments: import('./types').TaskAssignment[];
   reminders: import('./types').Reminder[];
+  recurring_checks: import('./types').RecurringCheck[];
+  recurring_check_completions: import('./types').RecurringCheckCompletion[];
   visit_notes: import('./types').VisitNote[];
   documents: import('./types').Document[];
   family_updates: import('./types').FamilyUpdate[];
@@ -22,6 +24,8 @@ function defaultStore(): LocalDataStore {
   const hiredId = crypto.randomUUID();
   const groceryTaskId = crypto.randomUUID();
   const dinnerTaskId = crypto.randomUUID();
+  const toiletPaperCheckId = crypto.randomUUID();
+  const staplesCheckId = crypto.randomUUID();
 
   return {
     profiles: [
@@ -113,7 +117,7 @@ function defaultStore(): LocalDataStore {
         status: 'pending',
         checklist: [],
         created_by: adminId,
-        claimed_by: hiredId,
+        claimed_by: null,
         created_at: now,
       },
     ],
@@ -122,6 +126,11 @@ function defaultStore(): LocalDataStore {
         id: crypto.randomUUID(),
         task_id: groceryTaskId,
         profile_id: familyId,
+      },
+      {
+        id: crypto.randomUUID(),
+        task_id: dinnerTaskId,
+        profile_id: hiredId,
       },
     ],
     reminders: [
@@ -144,6 +153,25 @@ function defaultStore(): LocalDataStore {
         created_at: now,
       },
     ],
+    recurring_checks: [
+      {
+        id: toiletPaperCheckId,
+        title: 'Toilet paper stocked',
+        description: 'Check bathroom and hall closet supplies',
+        active: true,
+        created_by: adminId,
+        created_at: now,
+      },
+      {
+        id: staplesCheckId,
+        title: 'Kitchen staples',
+        description: 'Milk, bread, eggs, and fruit on hand',
+        active: true,
+        created_by: adminId,
+        created_at: now,
+      },
+    ],
+    recurring_check_completions: [],
     visit_notes: [],
     documents: [],
     family_updates: [],
@@ -183,6 +211,32 @@ export function loadLocalStore(): LocalDataStore {
         show_on_mother_hub: task.show_on_mother_hub !== false,
       }));
       if (!parsed.activity_log) parsed.activity_log = [];
+      let needsSave = false;
+      if (!parsed.recurring_checks) {
+        parsed.recurring_checks = [];
+        needsSave = true;
+      }
+      if (!parsed.recurring_check_completions) {
+        parsed.recurring_check_completions = [];
+        needsSave = true;
+      }
+      for (const task of parsed.tasks) {
+        if (task.claimed_by) {
+          const alreadyAssigned = parsed.task_assignments.some(
+            (a) => a.task_id === task.id && a.profile_id === task.claimed_by
+          );
+          if (!alreadyAssigned) {
+            parsed.task_assignments.push({
+              id: crypto.randomUUID(),
+              task_id: task.id,
+              profile_id: task.claimed_by,
+            });
+          }
+          task.claimed_by = null;
+          needsSave = true;
+        }
+      }
+      if (needsSave) saveLocalStore(parsed);
       return parsed;
     }
   } catch {

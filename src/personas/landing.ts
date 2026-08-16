@@ -44,7 +44,7 @@ export async function renderLanding(): Promise<void> {
 
   const logoMark = el('div', { className: 'landing-logo' },
     el('div', { className: 'landing-logo-mark' }, icon('heart')),
-    el('h1', {}, "Mom's Care")
+    el('h1', {}, "Jeanne's Care Bridge")
   );
 
   const hero = el('div', { className: 'landing-hero' },
@@ -78,11 +78,16 @@ export async function renderLanding(): Promise<void> {
     );
   }
 
-  const altAccess = el('div', { className: 'landing-alt-access' });
+  const altAccess = el('div', { className: 'landing-alt-access' },
+    el('p', { className: 'landing-alt-access-label' }, "On Mom's tablet?")
+  );
 
-  const momTabletBtn = el('button', { className: 'btn btn-ghost btn-block', type: 'button' },
-    icon('home'),
-    "Mom's tablet"
+  const momTabletBtn = el('button', { className: 'btn btn-secondary btn-lg btn-block landing-tablet-btn', type: 'button' },
+    el('span', { className: 'landing-tablet-btn-icon' }, icon('home')),
+    el('span', { className: 'landing-tablet-btn-text' },
+      el('span', { className: 'landing-tablet-btn-title' }, "Mom's tablet"),
+      el('span', { className: 'landing-tablet-btn-desc' }, 'Tap to sign in with PIN')
+    )
   );
   momTabletBtn.addEventListener('click', async () => {
     const ok = await promptMotherPin();
@@ -124,7 +129,7 @@ export async function renderModuleSelect(): Promise<void> {
 
   const logoMark = el('div', { className: 'landing-logo' },
     el('div', { className: 'landing-logo-mark' }, icon('heart')),
-    el('h1', {}, "Mom's Care")
+    el('h1', {}, "Jeanne's Care Bridge")
   );
 
   const subtitle = isAdminProfile()

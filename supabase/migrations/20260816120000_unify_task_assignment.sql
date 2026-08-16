@@ -1,4 +1,17 @@
--- Resolve assigned user names for the mother hub (anon-safe).
+-- Move legacy claimed_by values into task_assignments and simplify mother hub helper lookup.
+
+INSERT INTO task_assignments (id, task_id, profile_id)
+SELECT gen_random_uuid(), t.id, t.claimed_by
+FROM tasks t
+WHERE t.claimed_by IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM task_assignments ta
+    WHERE ta.task_id = t.id AND ta.profile_id = t.claimed_by
+  );
+
+UPDATE tasks SET claimed_by = NULL WHERE claimed_by IS NOT NULL;
+
 CREATE OR REPLACE FUNCTION get_mother_hub_tasks()
 RETURNS TABLE (
   id UUID,

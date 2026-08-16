@@ -530,6 +530,10 @@ button, input, select, textarea {
   gap: 0.35rem 0.75rem;
 }
 
+.card-table-row--admin-task {
+  grid-template-columns: minmax(4.5rem, auto) minmax(3.5rem, 1fr) minmax(4.5rem, auto) minmax(4rem, 1.2fr);
+}
+
 .card-table-label {
   font-weight: 700;
   color: var(--color-text-muted);
@@ -698,6 +702,6 @@ button, input, select, textarea {
 @media (min-width: 900px) {
   .admin-app .app-version-badge,
   .caregiver-app .app-version-badge {
-    bottom: max(0.35rem, env(safe-area-inset-bottom));
+    display: none;
   }
 }

@@ -1,7 +1,8 @@
-import { api } from '../../shared/api';
+import { api, PlaidApiError } from '../../shared/api';
 import { getSession } from '../../shared/auth';
+import { openPlaidLink } from '../../shared/plaidLink';
 import { renderAdminShell } from '../shared/shell';
-import { el, formatCurrency, formatDate, showModal } from '../../shared/utils';
+import { el, formatCurrency, formatDate, showModal, showToast } from '../../shared/utils';
 import * as XLSX from 'xlsx';
 import type { FinancialAccount, Transaction } from '../../shared/types';
 
@@ -30,10 +31,12 @@ export async function renderAdminFinance(): Promise<void> {
   const headerActions = el('div', { style: 'display:flex;gap:0.5rem;flex-wrap:wrap' });
   if (chimeAutoSync) {
     headerActions.append(
-      el('button', { className: 'btn btn-secondary', type: 'button', id: 'refresh-chime' }, 'Refresh Chime')
+      el('button', { className: 'btn btn-secondary', type: 'button', id: 'refresh-chime' }, 'Refresh Chime'),
+      el('button', { className: 'btn btn-ghost', type: 'button', id: 'reconnect-chime' }, 'Reconnect Chime')
     );
   } else {
     headerActions.append(
+      el('button', { className: 'btn btn-primary', type: 'button', id: 'connect-chime' }, 'Connect Chime'),
       el('button', { className: 'btn btn-secondary', type: 'button', id: 'set-chime-balance' },
         chimeAccount?.last_balance != null ? 'Update Chime Balance' : 'Enter Chime Balance'
       )
@@ -55,7 +58,17 @@ export async function renderAdminFinance(): Promise<void> {
       el('p', {
         style: 'font-size:0.9rem;color:var(--color-text-muted);margin:0 0 1rem',
       },
-        'Chime auto-sync is not connected yet. Enter the current balance manually so it appears on Mom\'s hub.'
+        'Connect Chime via Plaid for automatic balance sync, or enter the balance manually as a fallback.'
+      )
+    );
+  } else {
+    content.append(
+      el('p', {
+        style: 'font-size:0.9rem;color:var(--color-text-muted);margin:0 0 1rem',
+      },
+        chimeAccount?.last_synced
+          ? `Chime is connected. Balance refreshes automatically every 6 hours. Last synced ${formatDate(chimeAccount.last_synced)}.`
+          : 'Chime is connected via Plaid. Balance will sync on the next refresh.'
       )
     );
   }
@@ -136,12 +149,33 @@ export async function renderAdminFinance(): Promise<void> {
 
   renderAdminShell(content, '/admin/finance');
 
+  document.getElementById('connect-chime')?.addEventListener('click', () => {
+    void startPlaidConnect(async () => {
+      await renderAdminFinance();
+    });
+  });
+
+  document.getElementById('reconnect-chime')?.addEventListener('click', () => {
+    void startPlaidConnect(async () => {
+      await renderAdminFinance();
+    });
+  });
+
   document.getElementById('refresh-chime')?.addEventListener('click', async () => {
+    const btn = document.getElementById('refresh-chime') as HTMLButtonElement;
+    btn.disabled = true;
     try {
       await api.refreshChimeBalance();
+      showToast('Chime balance updated');
       await renderAdminFinance();
-    } catch {
-      alert('Chime refresh requires Plaid configuration. Balance shown is from last manual update.');
+    } catch (err) {
+      if (err instanceof PlaidApiError && err.needsRelink) {
+        alert('Chime login expired. Click "Reconnect Chime" to sign in again.');
+      } else {
+        alert(err instanceof Error ? err.message : 'Could not refresh Chime balance.');
+      }
+    } finally {
+      btn.disabled = false;
     }
   });
 
@@ -244,6 +278,31 @@ function renderChimeBalanceForm(currentBalance: number | null, onSuccess: () => 
   });
 
   return form;
+}
+
+async function startPlaidConnect(onSuccess: () => void | Promise<void>): Promise<void> {
+  try {
+    const linkToken = await api.getPlaidLinkToken();
+    await openPlaidLink({
+      token: linkToken,
+      onSuccess: async (publicToken) => {
+        try {
+          await api.exchangePlaidToken(publicToken);
+          showToast('Chime connected');
+          await onSuccess();
+        } catch (err) {
+          alert(err instanceof Error ? err.message : 'Could not connect Chime account.');
+        }
+      },
+      onExit: (error) => {
+        if (error?.display_message || error?.error_message) {
+          showToast(error.display_message ?? error.error_message ?? 'Plaid Link closed');
+        }
+      },
+    });
+  } catch (err) {
+    alert(err instanceof Error ? err.message : 'Could not start Plaid Link.');
+  }
 }
 
 function renderImportForm(

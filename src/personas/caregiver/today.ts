@@ -2,8 +2,11 @@ import { api } from '../../shared/api';
 import { getSession } from '../../shared/auth';
 import { renderCaregiverShell } from '../shared/shell';
 import { navigate } from '../../shared/router';
-import { el, formatDate, formatTime, emptyState } from '../../shared/utils';
+import { el, formatTime, emptyState } from '../../shared/utils';
 import { icon } from '../../shared/icons';
+import { ensureTaskRealtime } from '../../shared/realtime';
+import { taskHasAssignees } from '../../shared/taskAssignments';
+import { renderCaregiverTaskCard } from './taskCard';import { renderRecurringChecksSection } from './recurringChecks';
 
 export async function renderCaregiverToday(): Promise<void> {
   const session = getSession();
@@ -18,10 +21,12 @@ export async function renderCaregiverToday(): Promise<void> {
   const myTaskIds = new Set(
     assignments.filter((a) => a.profile_id === profileId).map((a) => a.task_id)
   );
-  const myTasks = tasks.filter(
-    (t) => myTaskIds.has(t.id) || (t.open_slot && !t.claimed_by) || t.claimed_by === profileId
-  ).filter((t) => t.status !== 'completed');
-
+  const assignedTasks = tasks.filter(
+    (t) => myTaskIds.has(t.id) && t.status !== 'completed'
+  );
+  const availableTasks = tasks.filter(
+    (t) => t.open_slot && !taskHasAssignees(t.id, assignments) && t.status !== 'completed'
+  );
   const today = new Date().toISOString().slice(0, 10);
   const todayEvents = events.filter((e) => e.start_at.startsWith(today));
 
@@ -33,6 +38,8 @@ export async function renderCaregiverToday(): Promise<void> {
   );
   logVisitBtn.addEventListener('click', () => navigate('/caregiver/visit'));
   content.append(el('div', { className: 'caregiver-cta' }, logVisitBtn));
+
+  content.append(await renderRecurringChecksSection(() => renderCaregiverToday()));
 
   content.append(el('h2', { className: 'section-title' }, icon('calendar'), 'Today\'s Schedule'));
   if (todayEvents.length === 0) {
@@ -57,50 +64,49 @@ export async function renderCaregiverToday(): Promise<void> {
   }
 
   content.append(el('h2', { className: 'section-title' }, icon('clipboard-list'), 'My Tasks'));
-  if (myTasks.length === 0) {
+  if (assignedTasks.length === 0) {
     content.append(emptyState(
       icon('check-circle'),
       'All caught up',
       'No tasks assigned. Check back later.'
     ));
   } else {
-    for (const task of myTasks) {
-      content.append(renderCaregiverTaskCard(task, profileId, () => renderCaregiverToday()));
+    const taskList = el('div', { className: 'caregiver-task-list' });
+    for (const task of assignedTasks) {
+      taskList.append(
+        renderCaregiverTaskCard(task, {
+          profileId,
+          refresh: () => renderCaregiverToday(),
+        })
+      );
     }
+    content.append(taskList);
+  }
+
+  content.append(el('h2', { className: 'section-title' }, icon('users'), 'Available to Claim'));
+  if (availableTasks.length === 0) {
+    content.append(emptyState(
+      icon('check-circle'),
+      'Nothing open',
+      'No unclaimed tasks right now.'
+    ));
+  } else {
+    const taskList = el('div', { className: 'caregiver-task-list' });
+    for (const task of availableTasks) {
+      taskList.append(
+        renderCaregiverTaskCard(task, {
+          profileId,
+          refresh: () => renderCaregiverToday(),
+          showClaim: true,
+          isUnassigned: !taskHasAssignees(task.id, assignments),
+        })      );
+    }
+    content.append(taskList);
   }
 
   renderCaregiverShell(content, '/caregiver');
+  ensureTaskRealtime(() => {
+    void renderCaregiverToday();
+  });
 }
 
-function renderCaregiverTaskCard(
-  task: import('../../shared/types').Task,
-  profileId: string | undefined,
-  refresh: () => void
-): HTMLElement {
-  const card = el('div', { className: 'card task-card' },
-    el('strong', {}, task.title),
-    task.description ? el('p', {}, task.description) : null,
-    task.due_at ? el('p', { style: 'font-size:0.85rem;color:var(--color-text-muted)' }, `Due: ${formatDate(task.due_at)}`) : null,
-    task.open_slot && !task.claimed_by
-      ? el('button', { className: 'btn btn-secondary', type: 'button', style: 'margin-top:0.5rem' }, 'Claim this task')
-      : null,
-    el('button', { className: 'btn btn-primary', type: 'button', style: 'margin-top:0.5rem' }, 'Mark Complete')
-  );
-
-  card.querySelector('.btn-secondary')?.addEventListener('click', async () => {
-    if (!profileId) return;
-    try {
-      await api.claimTask(task.id, profileId);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Unable to claim task');
-    }
-  });
-
-  card.querySelector('.btn-primary')?.addEventListener('click', async () => {
-    await api.updateTask(task.id, { status: 'completed' });
-    await refresh();
-  });
-
-  return card;
-}

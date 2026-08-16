@@ -5,16 +5,19 @@ import { icon } from '../../shared/icons';
 import { navigate } from '../../shared/router';
 
 export async function renderAdminDashboard(): Promise<void> {
-  const [tasks, events, reminders, accounts, visitNotes] = await Promise.all([
+  const [tasks, events, reminders, accounts, visitNotes, assignments] = await Promise.all([
     api.getTasks(),
     api.getUpcomingEvents(7),
     api.getReminders(),
     api.getFinancialAccounts(),
     api.getVisitNotes(),
+    api.getTaskAssignments(),
   ]);
 
   const pendingTasks = tasks.filter((t) => t.status !== 'completed');
-  const openSlots = tasks.filter((t) => t.open_slot && !t.claimed_by);
+  const openSlots = tasks.filter(
+    (t) => t.open_slot && !assignments.some((a) => a.task_id === t.id)
+  );
   const chime = accounts.find((a) => a.institution.toLowerCase() === 'chime');
 
   const content = el('div', {});

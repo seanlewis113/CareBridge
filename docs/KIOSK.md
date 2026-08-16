@@ -4,10 +4,10 @@ Use these steps to keep Mom's tablet locked to her hub view.
 
 ## iPad (Recommended: Guided Access)
 
-1. Install Mom's Care as a PWA: open the app in Safari, tap Share, then **Add to Home Screen**.
+1. Install Jeanne's Care Bridge as a PWA: open the app in Safari, tap Share, then **Add to Home Screen**.
 2. Open **Settings → Accessibility → Guided Access** and turn it on.
 3. Set a Guided Access passcode (different from the app PIN).
-4. Open Mom's Care from the home screen and sign in as **Mom** with her PIN.
+4. Open Jeanne's Care Bridge from the home screen and sign in as **Mom** with her PIN.
 5. Triple-click the side button to start Guided Access.
 6. Disable touch on areas you don't want her to use (optional), then tap **Start**.
 
@@ -16,9 +16,9 @@ To exit Guided Access, triple-click the side button and enter the Guided Access 
 ## Android Tablet
 
 1. Install **Fully Kiosk Browser** (or similar) from the Play Store.
-2. Set the start URL to your deployed Mom's Care URL (e.g. `https://your-app.vercel.app`).
+2. Set the start URL to your deployed Jeanne's Care Bridge URL (e.g. `https://your-app.vercel.app`).
 3. Enable kiosk mode and set a PIN for exiting kiosk.
-4. In Mom's Care, sign in as **Mom** and bookmark `#/mother`.
+4. In Jeanne's Care Bridge, sign in as **Mom** and bookmark `#/mother`.
 
 ## App PINs
 

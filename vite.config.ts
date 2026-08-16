@@ -33,9 +33,9 @@ export default defineConfig({
       },
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
-        name: "Mom's Care",
-        short_name: 'MomsCare',
-        description: 'Family care coordination for Mom',
+        name: "Jeanne's Care Bridge",
+        short_name: 'JeanneCare',
+        description: 'Family care coordination for Jeanne',
         theme_color: '#e67e22',
         background_color: '#fdf6ec',
         display: 'standalone',

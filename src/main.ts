@@ -6,14 +6,16 @@ import './styles/mother.css';
 import './styles/admin.css';
 
 import { initRouter, registerRoute, navigate, getCurrentRoute } from './shared/router';
-import { isAdmin, isAdminProfile, isAuthenticated, isCaregiver, isMother, isMotherPinVerified, handleAuthSignedOut, getSession } from './shared/auth';
+import { isAdmin, isAdminProfile, isAuthenticated, isCaregiver, isMother, isMotherPinVerified, handleAuthSignedOut, getSession, signOut } from './shared/auth';
 import { isSupabaseConfigured, getSupabase } from './shared/supabase';
 import { renderLanding, renderModuleSelect } from './personas/landing';
-import { renderMotherHub } from './personas/mother/hub';
+import { renderMotherHub, teardownMotherHub } from './personas/mother/hub';
+import { teardownTaskRealtime } from './shared/realtime';
 import { renderAdminDashboard } from './personas/admin/dashboard';
 import { renderAdminTasks } from './personas/admin/tasks';
 import { renderAdminCalendar } from './personas/admin/calendar';
 import { renderAdminReminders } from './personas/admin/reminders';
+import { renderAdminChecks } from './personas/admin/checks';
 import { renderAdminFinance } from './personas/admin/finance';
 import { renderAdminDocuments } from './personas/admin/documents';
 import { renderAdminVisits } from './personas/admin/visits';
@@ -41,6 +43,14 @@ async function guardAdmin(): Promise<boolean> {
   if (!isAdmin() || !isAuthenticated() || !isAdminProfile()) {
     await navigate('/');
     return false;
+  }
+  if (isSupabaseConfigured) {
+    const { data } = await getSupabase().auth.getSession();
+    if (!data.session?.user) {
+      await signOut();
+      await navigate('/');
+      return false;
+    }
   }
   return true;
 }
@@ -99,6 +109,11 @@ function registerRoutes(): void {
   registerRoute('/admin/reminders', async () => {
     if (!(await guardAdmin())) return;
     await renderAdminReminders();
+  });
+
+  registerRoute('/admin/checks', async () => {
+    if (!(await guardAdmin())) return;
+    await renderAdminChecks();
   });
 
   registerRoute('/admin/finance', async () => {
@@ -213,7 +228,14 @@ async function init(): Promise<void> {
   mountVersionBadge();
 
   registerRoutes();
-  initRouter(app);
+  initRouter(app, (path) => {
+    if (!path.startsWith('/mother')) {
+      teardownMotherHub();
+    }
+    if (!path.startsWith('/caregiver')) {
+      teardownTaskRealtime();
+    }
+  });
 
   if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     const { registerSW } = await import('virtual:pwa-register');

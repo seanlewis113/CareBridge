@@ -1,4 +1,5 @@
 import { getSupabase as getSupabaseClient, isSupabaseConfigured } from './supabase';
+import { notifyLocalDataChange } from './realtime';
 import { loadLocalStore, saveLocalStore } from './localStore';
 import { expandRecurringEvents, getSourceEventId } from './calendarRecurrence';
 import type {
@@ -11,6 +12,9 @@ import type {
   Persona,
   Profile,
   Reminder,
+  RecurringCheck,
+  RecurringCheckCompletion,
+  RecurringCheckWithStatus,
   MotherHubTask,
   Task,
   TaskAssignment,
@@ -58,6 +62,24 @@ interface ActivityContext {
 
 let activityContext: ActivityContext = { profileId: null, persona: null };
 
+let recurringChecksSchemaReady = !isSupabaseConfigured;
+
+export function isRecurringChecksSchemaReady(): boolean {
+  return recurringChecksSchemaReady;
+}
+
+function isMissingDbTableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as { code?: string; message?: string; details?: string };
+  const text = `${e.message ?? ''} ${e.details ?? ''}`.toLowerCase();
+  return (
+    e.code === 'PGRST205' ||
+    e.code === '42P01' ||
+    text.includes('recurring_check') && text.includes('does not exist') ||
+    text.includes('could not find the table')
+  );
+}
+
 export function setActivityContext(ctx: ActivityContext): void {
   activityContext = ctx;
 }
@@ -75,11 +97,6 @@ function resolveTaskHelperName(
   profiles: Profile[],
   assignments: TaskAssignment[]
 ): string | null {
-  if (task.claimed_by) {
-    const claimer = profiles.find((p) => p.id === task.claimed_by);
-    if (claimer) return claimer.display_name;
-  }
-
   const assignedIds = assignments
     .filter((a) => a.task_id === task.id)
     .map((a) => a.profile_id);
@@ -351,6 +368,7 @@ export const api = {
       return { ...(data as Task), checklist: newTask.checklist, show_on_mother_hub: (data as Task).show_on_mother_hub !== false };
     }
     updateLocal('tasks', (items) => [...items, newTask]);
+    notifyLocalDataChange('tasks');
     return newTask;
   },
 
@@ -377,6 +395,7 @@ export const api = {
         return t;
       })
     );
+    notifyLocalDataChange('tasks');
     return updated;
   },
 
@@ -403,6 +422,7 @@ export const api = {
         metadata: { snapshot, title: snapshot.title },
       });
     }
+    notifyLocalDataChange('tasks');
   },
 
   async restoreTask(snapshot: Task): Promise<Task> {
@@ -434,12 +454,37 @@ export const api = {
     return getLocal('task_assignments');
   },
 
-  async assignTask(taskId: string, profileId: string): Promise<TaskAssignment> {
+  async assignTask(
+    taskId: string,
+    profileId: string,
+    options?: { log?: boolean }
+  ): Promise<TaskAssignment> {
     const profile = await this.getProfile(profileId);
+    const existingAssignments = await this.getTaskAssignments();
+    const existing = existingAssignments.find(
+      (a) => a.task_id === taskId && a.profile_id === profileId
+    );
+    if (existing) return existing;
+
     const assignment: TaskAssignment = { id: crypto.randomUUID(), task_id: taskId, profile_id: profileId };
+    const shouldLog = options?.log !== false;
     if (isSupabaseConfigured) {
       const { data, error } = await db().from('task_assignments').insert(assignment).select().single();
       if (error) throw error;
+      if (shouldLog) {
+        await this.logActivity('task.assign', {
+          entityType: 'task',
+          entityId: taskId,
+          metadata: {
+            profile_id: profileId,
+            display_name: profile?.display_name ?? 'Unknown',
+          },
+        });
+      }
+      return data as TaskAssignment;
+    }
+    updateLocal('task_assignments', (items) => [...items, assignment]);
+    if (shouldLog) {
       await this.logActivity('task.assign', {
         entityType: 'task',
         entityId: taskId,
@@ -448,17 +493,8 @@ export const api = {
           display_name: profile?.display_name ?? 'Unknown',
         },
       });
-      return data as TaskAssignment;
     }
-    updateLocal('task_assignments', (items) => [...items, assignment]);
-    await this.logActivity('task.assign', {
-      entityType: 'task',
-      entityId: taskId,
-      metadata: {
-        profile_id: profileId,
-        display_name: profile?.display_name ?? 'Unknown',
-      },
-    });
+    notifyLocalDataChange('task_assignments');
     return assignment;
   },
 
@@ -492,24 +528,22 @@ export const api = {
         display_name: profile?.display_name ?? 'Unknown',
       },
     });
+    notifyLocalDataChange('task_assignments');
   },
 
   async claimTask(taskId: string, profileId: string): Promise<Task> {
     const profile = await this.getProfile(profileId);
-    if (isSupabaseConfigured) {
-      const { data: before, error: beforeError } = await db().from('tasks').select('*').eq('id', taskId).single();
-      if (beforeError) throw beforeError;
-      const existing = before as Task;
-      if (existing.claimed_by && existing.claimed_by !== profileId) {
-        throw new Error('This task has already been claimed by someone else');
-      }
-      const { data, error } = await db()
-        .from('tasks')
-        .update({ claimed_by: profileId })
-        .eq('id', taskId)
-        .select()
-        .single();
-      if (error) throw error;
+    const [tasks, assignments] = await Promise.all([this.getTasks(), this.getTaskAssignments()]);
+    const existing = tasks.find((t) => t.id === taskId);
+    if (!existing) throw new Error('Task not found');
+
+    const taskAssignments = assignments.filter((a) => a.task_id === taskId);
+    if (taskAssignments.length > 0 && !taskAssignments.some((a) => a.profile_id === profileId)) {
+      throw new Error('This task has already been claimed by someone else');
+    }
+
+    if (!taskAssignments.some((a) => a.profile_id === profileId)) {
+      await this.assignTask(taskId, profileId, { log: false });
       await this.logActivity('task.claim', {
         entityType: 'task',
         entityId: taskId,
@@ -518,27 +552,9 @@ export const api = {
           display_name: profile?.display_name ?? 'Unknown',
         },
       });
-      return data as Task;
     }
 
-    const tasks = getLocal('tasks');
-    const existing = tasks.find((t) => t.id === taskId);
-    if (!existing) throw new Error('Task not found');
-    if (existing.claimed_by && existing.claimed_by !== profileId) {
-      throw new Error('This task has already been claimed by someone else');
-    }
-    updateLocal('tasks', (items) =>
-      items.map((t) => (t.id === taskId ? { ...t, claimed_by: profileId } : t))
-    );
-    await this.logActivity('task.claim', {
-      entityType: 'task',
-      entityId: taskId,
-      metadata: {
-        profile_id: profileId,
-        display_name: profile?.display_name ?? 'Unknown',
-      },
-    });
-    return { ...existing, claimed_by: profileId };
+    return existing;
   },
 
   async getMotherHubTasks(): Promise<MotherHubTask[]> {
@@ -658,6 +674,203 @@ export const api = {
     }
     updateLocal('reminders', (items) => [snapshot, ...items]);
     return snapshot;
+  },
+
+  async getRecurringChecks(): Promise<RecurringCheck[]> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await db()
+        .from('recurring_checks')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (error) {
+        if (isMissingDbTableError(error)) {
+          recurringChecksSchemaReady = false;
+          return [];
+        }
+        throw error;
+      }
+      recurringChecksSchemaReady = true;
+      return data as RecurringCheck[];
+    }
+    return getLocal('recurring_checks') ?? [];
+  },
+
+  async getRecurringChecksWithStatus(activeOnly = true): Promise<RecurringCheckWithStatus[]> {
+    const checks = await this.getRecurringChecks();
+    const visible = activeOnly ? checks.filter((c) => c.active) : checks;
+
+    if (isSupabaseConfigured) {
+      if (!recurringChecksSchemaReady) {
+        return visible.map((check) => ({ ...check, last_completion: null }));
+      }
+      const { data, error } = await db()
+        .from('recurring_check_completions')
+        .select('*, completed_by_profile:profiles!completed_by(*)')
+        .order('completed_at', { ascending: false });
+      if (error) {
+        if (isMissingDbTableError(error)) {
+          recurringChecksSchemaReady = false;
+          return visible.map((check) => ({ ...check, last_completion: null }));
+        }
+        throw error;
+      }
+      const completions = data as RecurringCheckCompletion[];
+      return visible.map((check) => {
+        const last = completions.find((c) => c.check_id === check.id);
+        return { ...check, last_completion: last ?? null };
+      });
+    }
+
+    const completions = getLocal('recurring_check_completions') ?? [];
+    const profiles = getLocal('profiles');
+    return visible.map((check) => {
+      const last = completions
+        .filter((c) => c.check_id === check.id)
+        .sort((a, b) => b.completed_at.localeCompare(a.completed_at))[0];
+      return {
+        ...check,
+        last_completion: last
+          ? {
+              ...last,
+              completed_by_profile: profiles.find((p) => p.id === last.completed_by),
+            }
+          : null,
+      };
+    });
+  },
+
+  async createRecurringCheck(
+    check: Omit<RecurringCheck, 'id' | 'created_at'>
+  ): Promise<RecurringCheck> {
+    const newCheck: RecurringCheck = {
+      ...check,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+    };
+    if (isSupabaseConfigured) {
+      if (!recurringChecksSchemaReady) {
+        throw new Error(
+          'Recurring Checks tables are not set up yet. Run supabase/migrations/20260816100000_recurring_checks.sql in the Supabase SQL editor.'
+        );
+      }
+      const { data, error } = await db()
+        .from('recurring_checks')
+        .insert(newCheck)
+        .select()
+        .single();
+      if (error) {
+        if (isMissingDbTableError(error)) {
+          recurringChecksSchemaReady = false;
+          throw new Error(
+            'Recurring Checks tables are not set up yet. Run supabase/migrations/20260816100000_recurring_checks.sql in the Supabase SQL editor.'
+          );
+        }
+        throw error;
+      }
+      await this.logActivity('recurring_check.create', {
+        entityType: 'recurring_check',
+        entityId: (data as RecurringCheck).id,
+        metadata: { title: newCheck.title },
+      });
+      return data as RecurringCheck;
+    }
+    updateLocal('recurring_checks', (items) => [...items, newCheck]);
+    notifyLocalDataChange('recurring_checks');
+    return newCheck;
+  },
+
+  async updateRecurringCheck(
+    id: string,
+    updates: Partial<RecurringCheck>
+  ): Promise<RecurringCheck> {
+    if (isSupabaseConfigured) {
+      const { data: before, error: beforeError } = await db()
+        .from('recurring_checks')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (beforeError) throw beforeError;
+      const { data, error } = await db()
+        .from('recurring_checks')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      await this.logActivity('recurring_check.update', {
+        entityType: 'recurring_check',
+        entityId: id,
+        metadata: { changes: updates, previous: pickPrevious(before as RecurringCheck, updates) },
+      });
+      return data as RecurringCheck;
+    }
+    let updated!: RecurringCheck;
+    updateLocal('recurring_checks', (items) =>
+      items.map((c) => {
+        if (c.id === id) {
+          updated = { ...c, ...updates };
+          return updated;
+        }
+        return c;
+      })
+    );
+    notifyLocalDataChange('recurring_checks');
+    return updated;
+  },
+
+  async deleteRecurringCheck(id: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { data: snapshot, error: fetchError } = await db()
+        .from('recurring_checks')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (fetchError) throw fetchError;
+      const { error } = await db().from('recurring_checks').delete().eq('id', id);
+      if (error) throw error;
+      await this.logActivity('recurring_check.delete', {
+        entityType: 'recurring_check',
+        entityId: id,
+        metadata: { snapshot, title: (snapshot as RecurringCheck).title },
+      });
+      return;
+    }
+    updateLocal('recurring_checks', (items) => items.filter((c) => c.id !== id));
+    updateLocal('recurring_check_completions', (items) =>
+      items.filter((c) => c.check_id !== id)
+    );
+    notifyLocalDataChange('recurring_checks');
+  },
+
+  async completeRecurringCheck(
+    checkId: string,
+    profileId: string,
+    notes?: string | null
+  ): Promise<RecurringCheckCompletion> {
+    const completion: RecurringCheckCompletion = {
+      id: crypto.randomUUID(),
+      check_id: checkId,
+      completed_by: profileId,
+      completed_at: new Date().toISOString(),
+      notes: notes ?? null,
+    };
+    if (isSupabaseConfigured) {
+      const { data, error } = await db()
+        .from('recurring_check_completions')
+        .insert(completion)
+        .select('*, completed_by_profile:profiles!completed_by(*)')
+        .single();
+      if (error) throw error;
+      await this.logActivity('recurring_check.complete', {
+        entityType: 'recurring_check',
+        entityId: checkId,
+        metadata: { completed_by: profileId },
+      });
+      return data as RecurringCheckCompletion;
+    }
+    updateLocal('recurring_check_completions', (items) => [completion, ...items]);
+    notifyLocalDataChange('recurring_checks');
+    return completion;
   },
 
   async getVisitNotes(): Promise<VisitNote[]> {
@@ -854,10 +1067,9 @@ export const api = {
 
   async refreshChimeBalance(): Promise<FinancialAccount | null> {
     if (isSupabaseConfigured) {
-      const { data, error } = await db().functions.invoke('plaid-balance', { body: { action: 'refresh' } });
-      if (error) throw error;
+      const data = await invokePlaidBalance({ action: 'refresh' });
       await this.logActivity('financial.refresh_balance');
-      return data?.account ?? null;
+      return (data?.account as FinancialAccount | undefined) ?? null;
     }
     const accounts = getLocal('financial_accounts');
     const chime = accounts.find((a) => a.institution.toLowerCase() === 'chime');
@@ -866,6 +1078,35 @@ export const api = {
       last_balance: chime.last_balance,
       last_synced: new Date().toISOString(),
     });
+  },
+
+  async getPlaidLinkToken(): Promise<string> {
+    if (!isSupabaseConfigured) {
+      throw new Error('Plaid Link requires Supabase configuration');
+    }
+    const { data: sessionData } = await db().auth.getSession();
+    if (!sessionData.session) {
+      throw new PlaidApiError(
+        'You are not signed in with Supabase. Sign out, sign in with your admin email and password, then try Connect Chime again.'
+      );
+    }
+    const data = await invokePlaidBalance({ action: 'link_token' });
+    if (!data?.link_token) {
+      throw new Error('Could not create Plaid link token');
+    }
+    return data.link_token as string;
+  },
+
+  async exchangePlaidToken(publicToken: string): Promise<FinancialAccount> {
+    if (!isSupabaseConfigured) {
+      throw new Error('Plaid exchange requires Supabase configuration');
+    }
+    const data = await invokePlaidBalance({ action: 'exchange', public_token: publicToken });
+    if (!data?.account) {
+      throw new Error('Could not connect Chime account');
+    }
+    await this.logActivity('financial.connect_plaid');
+    return data.account as FinancialAccount;
   },
 
   async setChimeBalance(balance: number): Promise<FinancialAccount> {
@@ -1043,6 +1284,48 @@ export const api = {
     );
   },
 };
+
+export class PlaidApiError extends Error {
+  needsRelink: boolean;
+
+  constructor(message: string, needsRelink = false) {
+    super(message);
+    this.name = 'PlaidApiError';
+    this.needsRelink = needsRelink;
+  }
+}
+
+async function invokePlaidBalance(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const { data, error } = await db().functions.invoke('plaid-balance', { body });
+
+  const payload = (data ?? {}) as Record<string, unknown>;
+  if (payload.error) {
+    throw new PlaidApiError(
+      String(payload.error),
+      Boolean(payload.needs_relink)
+    );
+  }
+
+  if (error) {
+    const context = (error as { context?: { json?: () => Promise<Record<string, unknown>> } }).context;
+    if (context?.json) {
+      try {
+        const errBody = await context.json();
+        if (errBody?.error) {
+          throw new PlaidApiError(
+            String(errBody.error),
+            Boolean(errBody.needs_relink)
+          );
+        }
+      } catch (parseErr) {
+        if (parseErr instanceof PlaidApiError) throw parseErr;
+      }
+    }
+    throw new PlaidApiError(error.message ?? 'Plaid request failed');
+  }
+
+  return payload;
+}
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

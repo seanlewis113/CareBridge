@@ -1,5 +1,5 @@
 {
-  "name": "moms-care",
+  "name": "jeanne-care-bridge",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "icons": "node scripts/generate-icons.mjs",
     "postinstall": "node scripts/generate-icons.mjs",
-    "supabase:deploy-create-user": "supabase functions deploy create-user --project-ref zliprdkszovsihdvzrye --use-api --yes"
+    "supabase:db-push": "supabase db push --linked",
+    "supabase:link": "supabase link --project-ref zliprdkszovsihdvzrye --yes",
+    "supabase:deploy-create-user": "supabase functions deploy create-user --project-ref zliprdkszovsihdvzrye --use-api --yes",
+    "supabase:deploy-functions": "supabase functions deploy create-user --project-ref zliprdkszovsihdvzrye --use-api --yes && supabase functions deploy google-calendar-sync --project-ref zliprdkszovsihdvzrye --use-api --yes && supabase functions deploy plaid-balance --project-ref zliprdkszovsihdvzrye --use-api --yes"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

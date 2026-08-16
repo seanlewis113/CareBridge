@@ -2,6 +2,7 @@ import { clearActivePersona, isAdminProfile, signOut } from '../../shared/auth';
 import { navigate, link, MODULE_SELECT_PATH } from '../../shared/router';
 import { el } from '../../shared/utils';
 import { icon, type IconName } from '../../shared/icons';
+import { APP_VERSION, APP_BUILD_TIME, formatBuildTime } from '../../shared/version';
 
 interface NavItem {
   path: string;
@@ -70,6 +71,16 @@ function renderSidebar(
     });
     footer.append(signOutBtn);
   }
+
+  footer.append(
+    el('div', {
+      className: 'app-sidebar-version',
+      'aria-label': `Version ${APP_VERSION}, published ${formatBuildTime(APP_BUILD_TIME)}`,
+    },
+      el('span', { className: 'app-version-number' }, `v${APP_VERSION}`),
+      el('span', { className: 'app-version-date' }, formatBuildTime(APP_BUILD_TIME))
+    )
+  );
 
   sidebar.append(brand, nav, footer);
   return sidebar;
@@ -186,6 +197,7 @@ export function renderAdminShell(content: HTMLElement, activePath: string): void
   const allItems: NavItem[] = [
     { path: '/admin', label: 'Dashboard', icon: 'layout' },
     { path: '/admin/tasks', label: 'Tasks', icon: 'clipboard-list' },
+    { path: '/admin/checks', label: 'Recurring Checks', icon: 'list' },
     { path: '/admin/calendar', label: 'Calendar', icon: 'calendar' },
     { path: '/admin/reminders', label: 'Reminders', icon: 'bell' },
     { path: '/admin/visits', label: 'Visit Notes', icon: 'file-text' },
@@ -200,7 +212,7 @@ export function renderAdminShell(content: HTMLElement, activePath: string): void
   const moreItems = allItems.slice(4);
 
   const layout = el('div', { className: 'admin-layout page-enter' });
-  const sidebar = renderSidebar("Mom's Care", allItems, activePath, true);
+  const sidebar = renderSidebar("Jeanne's Care Bridge", allItems, activePath, true);
   const body = el('div', { className: 'app-shell-body' });
 
   body.append(
@@ -231,11 +243,11 @@ export function renderCaregiverShell(content: HTMLElement, activePath: string): 
   const moreItems = allItems.slice(4);
 
   const layout = el('div', { className: 'caregiver-layout page-enter' });
-  const sidebar = renderSidebar("Mom's Care", allItems, activePath, isAdminPreview);
+  const sidebar = renderSidebar("Jeanne's Care Bridge", allItems, activePath, isAdminPreview);
   const body = el('div', { className: 'app-shell-body' });
 
   body.append(
-    renderMobileHeader("Mom's Care", isAdminPreview),
+    renderMobileHeader("Jeanne's Care Bridge", isAdminPreview),
     el('main', { className: 'app-content' }, content),
     renderBottomNav(primaryItems, moreItems, activePath)
   );
