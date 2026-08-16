@@ -9,6 +9,8 @@ export interface LocalDataStore {
   reminders: import('./types').Reminder[];
   recurring_checks: import('./types').RecurringCheck[];
   recurring_check_completions: import('./types').RecurringCheckCompletion[];
+  responsibility_areas: import('./types').ResponsibilityArea[];
+  responsibility_assignments: import('./types').ResponsibilityAssignment[];
   visit_notes: import('./types').VisitNote[];
   documents: import('./types').Document[];
   family_updates: import('./types').FamilyUpdate[];
@@ -26,6 +28,8 @@ function defaultStore(): LocalDataStore {
   const dinnerTaskId = crypto.randomUUID();
   const toiletPaperCheckId = crypto.randomUUID();
   const staplesCheckId = crypto.randomUUID();
+  const financesAreaId = crypto.randomUUID();
+  const medicalAreaId = crypto.randomUUID();
 
   return {
     profiles: [
@@ -172,6 +176,34 @@ function defaultStore(): LocalDataStore {
       },
     ],
     recurring_check_completions: [],
+    responsibility_areas: [
+      {
+        id: financesAreaId,
+        title: 'Finances',
+        description: 'Bills, banking, and budget tracking',
+        created_by: adminId,
+        created_at: now,
+      },
+      {
+        id: medicalAreaId,
+        title: 'Medical appointments',
+        description: 'Scheduling, transportation, and follow-ups',
+        created_by: adminId,
+        created_at: now,
+      },
+    ],
+    responsibility_assignments: [
+      {
+        id: crypto.randomUUID(),
+        area_id: financesAreaId,
+        profile_id: adminId,
+      },
+      {
+        id: crypto.randomUUID(),
+        area_id: medicalAreaId,
+        profile_id: familyId,
+      },
+    ],
     visit_notes: [],
     documents: [],
     family_updates: [],
@@ -218,6 +250,14 @@ export function loadLocalStore(): LocalDataStore {
       }
       if (!parsed.recurring_check_completions) {
         parsed.recurring_check_completions = [];
+        needsSave = true;
+      }
+      if (!parsed.responsibility_areas) {
+        parsed.responsibility_areas = [];
+        needsSave = true;
+      }
+      if (!parsed.responsibility_assignments) {
+        parsed.responsibility_assignments = [];
         needsSave = true;
       }
       for (const task of parsed.tasks) {

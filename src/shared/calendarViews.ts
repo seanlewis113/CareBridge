@@ -2,6 +2,27 @@ import type { CalendarEvent } from './types';
 import { el, formatDate, formatTime } from './utils';
 import { icon, type IconName } from './icons';
 
+interface EventSpan {
+  startKey: string;
+  endKey: string;
+}
+
+interface WeekDay {
+  key: string;
+  dayNumber: number;
+  inMonth: boolean;
+}
+
+interface WeekSegment {
+  event: CalendarEvent;
+  startCol: number;
+  endCol: number;
+  lane: number;
+  showTitle: boolean;
+  isStart: boolean;
+  isEnd: boolean;
+}
+
 const VIEW_KEY = 'moms-care-calendar-view';
 
 export type CalendarViewMode = 'list' | 'grid';
@@ -107,16 +128,11 @@ export function renderCalendarGridView(events: CalendarEvent[], options: Calenda
     wrap.append(header);
   }
 
-  const byDay = new Map<string, CalendarEvent[]>();
-  for (const event of events) {
-    const day = event.start_at.slice(0, 10);
-    if (!byDay.has(day)) byDay.set(day, []);
-    byDay.get(day)!.push(event);
-  }
+  const byDay = buildSingleDayEventMap(events);
 
   const monthsWrap = el('div', { className: 'app-calendar-months' });
   for (const monthStart of buildMonthStarts(now, events)) {
-    monthsWrap.append(renderCalendarMonth(monthStart, byDay, now, options));
+    monthsWrap.append(renderCalendarMonth(monthStart, byDay, events, now, options));
   }
 
   if (options.scrollable) {
@@ -191,9 +207,14 @@ export function renderCalendarListView(events: CalendarEvent[], options: Calenda
 function buildMonthStarts(now: Date, events: CalendarEvent[]): Date[] {
   const starts: Date[] = [];
   const monthStartNow = new Date(now.getFullYear(), now.getMonth(), 1);
-  const eventMonths = events.map((event) => {
-    const date = new Date(event.start_at);
-    return new Date(date.getFullYear(), date.getMonth(), 1);
+  const eventMonths = events.flatMap((event) => {
+    const { startKey, endKey } = getEventSpan(event);
+    const startDate = parseDateKey(startKey);
+    const endDate = parseDateKey(endKey);
+    return [
+      new Date(startDate.getFullYear(), startDate.getMonth(), 1),
+      new Date(endDate.getFullYear(), endDate.getMonth(), 1),
+    ];
   });
   const earliest = [monthStartNow, ...eventMonths].reduce((min, current) => (current < min ? current : min));
   const latest = [monthStartNow, ...eventMonths].reduce((max, current) => (current > max ? current : max));
@@ -206,9 +227,254 @@ function buildMonthStarts(now: Date, events: CalendarEvent[]): Date[] {
   return starts;
 }
 
+function toLocalDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(key: string): Date {
+  const [year, month, day] = key.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function addDaysToKey(key: string, days: number): string {
+  const date = parseDateKey(key);
+  date.setDate(date.getDate() + days);
+  return toLocalDateKey(date);
+}
+
+function getEventSpan(event: CalendarEvent): EventSpan {
+  if (event.start_at.length === 10) {
+    const startKey = event.start_at;
+    const endExclusive = event.end_at.slice(0, 10);
+    const endKey = addDaysToKey(endExclusive, -1);
+    return { startKey, endKey: endKey < startKey ? startKey : endKey };
+  }
+
+  const startKey = toLocalDateKey(new Date(event.start_at));
+  const endKey = toLocalDateKey(new Date(event.end_at));
+  return { startKey, endKey };
+}
+
+function isMultiDayEvent(event: CalendarEvent): boolean {
+  const { startKey, endKey } = getEventSpan(event);
+  return endKey > startKey;
+}
+
+function getWeekLaneCount(week: WeekDay[], events: CalendarEvent[]): number {
+  const segments = assignWeekLanes(buildWeekSegments(week, events));
+  return segments.reduce((max, segment) => Math.max(max, segment.lane + 1), 0);
+}
+
+function buildSingleDayEventMap(events: CalendarEvent[]): Map<string, CalendarEvent[]> {
+  const map = new Map<string, CalendarEvent[]>();
+  for (const event of events) {
+    if (isMultiDayEvent(event)) continue;
+    const day = event.start_at.length === 10 ? event.start_at : toLocalDateKey(new Date(event.start_at));
+    if (!map.has(day)) map.set(day, []);
+    map.get(day)!.push(event);
+  }
+  return map;
+}
+
+function buildMonthWeeks(monthStart: Date): WeekDay[][] {
+  const weeks: WeekDay[][] = [];
+  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+  const firstWeekday = monthStart.getDay();
+  let week: WeekDay[] = [];
+
+  for (let i = 0; i < firstWeekday; i++) {
+    week.push({ key: '', dayNumber: 0, inMonth: false });
+  }
+
+  for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber++) {
+    const dayDate = new Date(monthStart.getFullYear(), monthStart.getMonth(), dayNumber);
+    week.push({ key: toLocalDateKey(dayDate), dayNumber, inMonth: true });
+    if (week.length === 7) {
+      weeks.push(week);
+      week = [];
+    }
+  }
+
+  if (week.length > 0) {
+    while (week.length < 7) {
+      week.push({ key: '', dayNumber: 0, inMonth: false });
+    }
+    weeks.push(week);
+  }
+
+  return weeks;
+}
+
+function buildWeekSegments(week: WeekDay[], events: CalendarEvent[]): Omit<WeekSegment, 'lane'>[] {
+  const inMonthDays = week.filter((day) => day.inMonth);
+  if (inMonthDays.length === 0) return [];
+
+  const weekStartKey = inMonthDays[0].key;
+  const weekEndKey = inMonthDays[inMonthDays.length - 1].key;
+  const segments: Omit<WeekSegment, 'lane'>[] = [];
+
+  for (const event of events) {
+    if (!isMultiDayEvent(event)) continue;
+    const { startKey, endKey } = getEventSpan(event);
+    if (endKey < weekStartKey || startKey > weekEndKey) continue;
+
+    const segmentStartKey = startKey > weekStartKey ? startKey : weekStartKey;
+    const segmentEndKey = endKey < weekEndKey ? endKey : weekEndKey;
+    const startCol = week.findIndex((day) => day.key === segmentStartKey);
+    const endCol = week.findIndex((day) => day.key === segmentEndKey);
+    if (startCol < 0 || endCol < 0) continue;
+
+    segments.push({
+      event,
+      startCol,
+      endCol,
+      showTitle: segmentStartKey === startKey,
+      isStart: segmentStartKey === startKey,
+      isEnd: segmentEndKey === endKey,
+    });
+  }
+
+  return segments.sort((a, b) => {
+    if (a.startCol !== b.startCol) return a.startCol - b.startCol;
+    const aLength = a.endCol - a.startCol;
+    const bLength = b.endCol - b.startCol;
+    return bLength - aLength;
+  });
+}
+
+function assignWeekLanes(segments: Omit<WeekSegment, 'lane'>[]): WeekSegment[] {
+  const laneEnds: number[] = [];
+  const placed: WeekSegment[] = [];
+
+  for (const segment of segments) {
+    let lane = laneEnds.findIndex((endCol) => endCol < segment.startCol);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(segment.endCol);
+    } else {
+      laneEnds[lane] = segment.endCol;
+    }
+    placed.push({ ...segment, lane });
+  }
+
+  return placed;
+}
+
+function renderGridDayEvent(event: CalendarEvent, options: CalendarGridOptions): HTMLElement {
+  const eventNode = options.onEdit
+    ? el('button', {
+      type: 'button',
+      className: 'app-calendar-day-event app-calendar-day-event--clickable',
+      'aria-label': `Edit ${event.title}`,
+    },
+      el('span', { className: 'app-calendar-day-event-title' }, event.title)
+    )
+    : el('div', { className: 'app-calendar-day-event' },
+      el('span', { className: 'app-calendar-day-event-title' }, event.title)
+    );
+
+  if (options.onEdit) {
+    eventNode.addEventListener('click', () => void options.onEdit!(event));
+  }
+
+  return eventNode;
+}
+
+function renderWeekSpanEvent(segment: WeekSegment, options: CalendarGridOptions): HTMLElement {
+  const classes = [
+    'app-calendar-span-event',
+    segment.isStart ? 'app-calendar-span-event--start' : 'app-calendar-span-event--continue',
+    segment.isEnd ? 'app-calendar-span-event--end' : 'app-calendar-span-event--extend',
+    options.onEdit ? 'app-calendar-span-event--clickable' : '',
+  ].filter(Boolean).join(' ');
+
+  const eventNode = options.onEdit
+    ? el('button', {
+      type: 'button',
+      className: classes,
+      style: `grid-column:${segment.startCol + 1} / ${segment.endCol + 2}; grid-row:${segment.lane + 1};`,
+      'aria-label': `Edit ${segment.event.title}`,
+    },
+      segment.showTitle
+        ? el('span', { className: 'app-calendar-span-event-title' }, segment.event.title)
+        : null
+    )
+    : el('div', {
+      className: classes,
+      style: `grid-column:${segment.startCol + 1} / ${segment.endCol + 2}; grid-row:${segment.lane + 1};`,
+    },
+      segment.showTitle
+        ? el('span', { className: 'app-calendar-span-event-title' }, segment.event.title)
+        : null
+    );
+
+  if (options.onEdit) {
+    eventNode.addEventListener('click', () => void options.onEdit!(segment.event));
+  }
+
+  return eventNode;
+}
+
+function renderCalendarWeek(
+  week: WeekDay[],
+  eventsByDay: Map<string, CalendarEvent[]>,
+  allEvents: CalendarEvent[],
+  now: Date,
+  options: CalendarGridOptions = {}
+): HTMLElement {
+  const laneCount = getWeekLaneCount(week, allEvents);
+  const segments = assignWeekLanes(buildWeekSegments(week, allEvents));
+  const weekEl = el('div', {
+    className: 'app-calendar-week',
+    style: laneCount > 0 ? `--span-lanes:${laneCount}` : undefined,
+  });
+
+  for (const day of week) {
+    if (!day.inMonth) {
+      weekEl.append(el('div', { className: 'app-calendar-day app-calendar-day--blank', 'aria-hidden': 'true' }));
+      continue;
+    }
+
+    const dayDate = parseDateKey(day.key);
+    const dayEvents = eventsByDay.get(day.key) ?? [];
+    const isToday = day.key === toLocalDateKey(now);
+    const isPast = dayDate < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const isInCurrentWeek = isDateInCurrentWeek(dayDate, now);
+
+    const dayCell = el('div', {
+      className: `app-calendar-day${isToday ? ' app-calendar-day--today' : ''}${isPast ? ' app-calendar-day--past' : ''}${isInCurrentWeek ? ' app-calendar-day--current-week' : ''}`,
+    });
+    dayCell.append(el('div', { className: 'app-calendar-day-number' }, String(day.dayNumber)));
+
+    if (dayEvents.length > 0) {
+      const eventsList = el('div', { className: 'app-calendar-day-events' });
+      for (const event of dayEvents) {
+        eventsList.append(renderGridDayEvent(event, options));
+      }
+      dayCell.append(eventsList);
+    }
+
+    weekEl.append(dayCell);
+  }
+
+  if (segments.length > 0) {
+    const barsRow = el('div', { className: 'app-calendar-week-bars' });
+    for (const segment of segments) {
+      barsRow.append(renderWeekSpanEvent(segment, options));
+    }
+    weekEl.append(barsRow);
+  }
+
+  return weekEl;
+}
+
 function renderCalendarMonth(
   monthStart: Date,
   eventsByDay: Map<string, CalendarEvent[]>,
+  allEvents: CalendarEvent[],
   now: Date,
   options: CalendarGridOptions = {}
 ): HTMLElement {
@@ -223,50 +489,8 @@ function renderCalendarMonth(
   monthCard.append(weekdays);
 
   const grid = el('div', { className: 'app-calendar-grid' });
-  const firstWeekday = monthStart.getDay();
-  for (let i = 0; i < firstWeekday; i++) {
-    grid.append(el('div', { className: 'app-calendar-day app-calendar-day--blank', 'aria-hidden': 'true' }));
-  }
-
-  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
-  for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber++) {
-    const dayDate = new Date(monthStart.getFullYear(), monthStart.getMonth(), dayNumber);
-    const key = dayDate.toISOString().slice(0, 10);
-    const dayEvents = eventsByDay.get(key) ?? [];
-    const isToday = key === now.toISOString().slice(0, 10);
-    const isPast = dayDate < new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const isInCurrentWeek = isDateInCurrentWeek(dayDate, now);
-
-    const dayCell = el('div', {
-      className: `app-calendar-day${isToday ? ' app-calendar-day--today' : ''}${isPast ? ' app-calendar-day--past' : ''}${isInCurrentWeek ? ' app-calendar-day--current-week' : ''}`,
-    });
-    dayCell.append(el('div', { className: 'app-calendar-day-number' }, String(dayNumber)));
-
-    if (dayEvents.length > 0) {
-      const eventsList = el('div', { className: 'app-calendar-day-events' });
-      for (const event of dayEvents) {
-        const eventNode = options.onEdit
-          ? el('button', {
-            type: 'button',
-            className: 'app-calendar-day-event app-calendar-day-event--clickable',
-            'aria-label': `Edit ${event.title}`,
-          },
-            el('span', { className: 'app-calendar-day-event-time' }, formatTime(event.start_at)),
-            el('span', { className: 'app-calendar-day-event-title' }, event.title)
-          )
-          : el('div', { className: 'app-calendar-day-event' },
-            el('span', { className: 'app-calendar-day-event-time' }, formatTime(event.start_at)),
-            el('span', { className: 'app-calendar-day-event-title' }, event.title)
-          );
-        if (options.onEdit) {
-          eventNode.addEventListener('click', () => void options.onEdit!(event));
-        }
-        eventsList.append(eventNode);
-      }
-      dayCell.append(eventsList);
-    }
-
-    grid.append(dayCell);
+  for (const week of buildMonthWeeks(monthStart)) {
+    grid.append(renderCalendarWeek(week, eventsByDay, allEvents, now, options));
   }
 
   monthCard.append(grid);

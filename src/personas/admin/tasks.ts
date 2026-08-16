@@ -5,50 +5,351 @@ import { createClockPickerField } from '../../shared/clock-picker';
 import { el, formatDate, showModal, confirmDialog } from '../../shared/utils';
 import { PERSONA_LABELS, type Task, type Profile, type Persona, type TaskAssignment } from '../../shared/types';
 import { getTaskAssigneeIds } from '../../shared/taskAssignments';
-export async function renderAdminTasks(): Promise<void> {
-  const [tasks, profiles, assignments] = await Promise.all([
-    api.getTasks(),
-    api.getProfiles(),
-    api.getTaskAssignments(),
-  ]);
 
+type TaskFlagFilter = 'all' | 'open_slot' | 'visit' | 'mom_hub';
+type TaskSortKey = 'title' | 'status' | 'assigned' | 'due' | 'created';
+
+const TASK_STATUSES: Task['status'][] = ['pending', 'in_progress', 'completed'];
+const DEFAULT_VISIBLE_STATUSES = new Set<Task['status']>(['pending', 'in_progress']);
+
+const STATUS_FILTER_LABELS: Record<Task['status'], string> = {
+  pending: 'Pending',
+  in_progress: 'In progress',
+  completed: 'Completed',
+};
+
+interface TaskListState {
+  search: string;
+  statuses: Set<Task['status']>;
+  assignee: 'all' | 'unassigned' | string;
+  flag: TaskFlagFilter;
+  sortKey: TaskSortKey;
+  sortDir: 'asc' | 'desc';
+}
+
+const DEFAULT_TASK_LIST_STATE: TaskListState = {
+  search: '',
+  statuses: new Set(DEFAULT_VISIBLE_STATUSES),
+  assignee: 'all',
+  flag: 'all',
+  sortKey: 'due',
+  sortDir: 'asc',
+};
+
+const STATUS_ORDER: Record<Task['status'], number> = {
+  pending: 0,
+  in_progress: 1,
+  completed: 2,
+};
+
+export async function renderAdminTasks(): Promise<void> {
+  let listState: TaskListState = {
+    ...DEFAULT_TASK_LIST_STATE,
+    statuses: new Set(DEFAULT_VISIBLE_STATUSES),
+  };
   const content = el('div', {});
-  content.append(
-    el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem' },
-      el('h2', {}, 'Tasks'),
-      el('button', { className: 'btn btn-primary', type: 'button', id: 'new-task' }, '+ New Task')
-    )
+
+  const render = async () => {
+    const [tasks, profiles, assignments] = await Promise.all([
+      api.getTasks(),
+      api.getProfiles(),
+      api.getTaskAssignments(),
+    ]);
+
+    const filtered = filterTasks(tasks, listState, assignments);
+    const sorted = sortTasks(filtered, listState, profiles, assignments);
+    const hasActiveFilters =
+      listState.search.trim() !== '' ||
+      !statusesMatchDefault(listState.statuses) ||
+      listState.assignee !== 'all' ||
+      listState.flag !== 'all';
+
+    const listSection = el('div', { className: 'admin-task-section' });
+    if (tasks.length === 0) {
+      listSection.append(el('p', { className: 'empty-state' }, 'No tasks yet. Create one to assign to caregivers.'));
+    } else {
+      const summary = el('p', { className: 'admin-task-summary card-table-muted' },
+        hasActiveFilters
+          ? `Showing ${sorted.length} of ${tasks.length} tasks`
+          : `${tasks.length} task${tasks.length === 1 ? '' : 's'}`
+      );
+
+      if (sorted.length === 0) {
+        listSection.append(
+          summary,
+          el('p', { className: 'empty-state' }, 'No tasks match your filters.')
+        );
+      } else {
+        const table = el('div', { className: 'card admin-task-table' },
+          el('div', { className: 'card-table' },
+            el('div', { className: 'card-table-header' },
+              el('div', { className: 'card-table-row card-table-row--admin-task' },
+                renderSortHeader('title', 'Task', listState, updateState),
+                renderSortHeader('status', 'Status', listState, updateState),
+                renderSortHeader('assigned', 'Assigned', listState, updateState),
+                renderSortHeader('due', 'Due', listState, updateState),
+                el('span', {}, 'Flags'),
+                el('span', {}, '')
+              )
+            ),
+            el('div', { className: 'admin-task-list card-table-body' })
+          )
+        );
+        const body = table.querySelector('.admin-task-list')!;
+        for (const task of sorted) {
+          body.append(renderTaskRow(task, profiles, assignments, render));
+        }
+        listSection.append(summary, table);
+      }
+    }
+
+    const newTaskBtn = el('button', { className: 'btn btn-primary', type: 'button' }, '+ New Task');
+    newTaskBtn.addEventListener('click', () => {
+      const form = createTaskForm(profiles, async () => { close(); await render(); });
+      const close = showModal('New Task', form);
+    });
+
+    content.replaceChildren(
+      el('div', { className: 'admin-task-page-header' },
+        el('h2', {}, 'Tasks'),
+        newTaskBtn
+      ),
+      renderTaskToolbar(listState, profiles, hasActiveFilters, updateState),
+      listSection
+    );
+  };
+
+  function updateState(patch: Partial<TaskListState>): void {
+    listState = { ...listState, ...patch };
+    void render();
+  }
+
+  await render();
+  renderAdminShell(content, '/admin/tasks');
+}
+
+function renderTaskToolbar(
+  state: TaskListState,
+  profiles: Profile[],
+  hasActiveFilters: boolean,
+  onChange: (patch: Partial<TaskListState>) => void
+): HTMLElement {
+  const search = el('input', {
+    type: 'search',
+    className: 'admin-task-filter-input',
+    placeholder: 'Search tasks…',
+    value: state.search,
+    'aria-label': 'Search tasks',
+  }) as HTMLInputElement;
+  search.addEventListener('input', () => onChange({ search: search.value }));
+
+  const statusToggles = el('div', { className: 'admin-task-status-toggles', role: 'group', 'aria-label': 'Filter by status' });
+  for (const status of TASK_STATUSES) {
+    const active = state.statuses.has(status);
+    const btn = el('button', {
+      type: 'button',
+      className: active ? 'active' : '',
+      'aria-pressed': active ? 'true' : 'false',
+    }, STATUS_FILTER_LABELS[status]);
+    btn.addEventListener('click', () => {
+      const next = new Set(state.statuses);
+      if (next.has(status)) {
+        next.delete(status);
+      } else {
+        next.add(status);
+      }
+      onChange({ statuses: next });
+    });
+    statusToggles.append(btn);
+  }
+
+  const assignee = el('select', { className: 'admin-task-filter-select', 'aria-label': 'Filter by assignee' },
+    el('option', { value: 'all' }, 'All assignees'),
+    el('option', { value: 'unassigned' }, 'Unassigned')
+  ) as HTMLSelectElement;
+  for (const profile of profiles.filter((p) => p.persona !== 'mother')) {
+    assignee.append(el('option', { value: profile.id }, profile.display_name));
+  }
+  assignee.value = state.assignee;
+  assignee.addEventListener('change', () => onChange({ assignee: assignee.value }));
+
+  const flag = el('select', { className: 'admin-task-filter-select', 'aria-label': 'Filter by flag' },
+    el('option', { value: 'all' }, 'All flags'),
+    el('option', { value: 'open_slot' }, 'Open slot'),
+    el('option', { value: 'visit' }, 'Visit'),
+    el('option', { value: 'mom_hub' }, 'Mom hub')
+  ) as HTMLSelectElement;
+  flag.value = state.flag;
+  flag.addEventListener('change', () => onChange({ flag: flag.value as TaskFlagFilter }));
+
+  const toolbar = el('div', { className: 'admin-task-toolbar' },
+    search,
+    statusToggles,
+    assignee,
+    flag
   );
 
-  const list = el('div', { className: 'admin-task-list' });
-  if (tasks.length === 0) {
-    list.append(el('p', { className: 'empty-state' }, 'No tasks yet. Create one to assign to caregivers.'));
-  } else {
-    for (const task of tasks) {
-      list.append(renderTaskCard(task, profiles, assignments, () => renderAdminTasks()));
+  const clearBtn = el('button', {
+    type: 'button',
+    className: 'btn btn-secondary admin-task-clear-filters',
+    disabled: hasActiveFilters ? undefined : 'true',
+    'aria-disabled': hasActiveFilters ? 'false' : 'true',
+  }, 'Clear filters');
+  clearBtn.addEventListener('click', () => onChange({
+    search: '',
+    statuses: new Set(DEFAULT_VISIBLE_STATUSES),
+    assignee: 'all',
+    flag: 'all',
+  }));
+  toolbar.append(clearBtn);
+
+  return toolbar;
+}
+
+function renderSortHeader(
+  key: TaskSortKey,
+  label: string,
+  state: TaskListState,
+  onChange: (patch: Partial<TaskListState>) => void
+): HTMLButtonElement {
+  const active = state.sortKey === key;
+  const indicator = active ? (state.sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+  const btn = el('button', {
+    type: 'button',
+    className: `admin-task-sort-btn${active ? ' active' : ''}`,
+    'aria-label': `Sort by ${label}`,
+  }, `${label}${indicator}`) as HTMLButtonElement;
+
+  btn.addEventListener('click', () => {
+    if (state.sortKey === key) {
+      onChange({ sortDir: state.sortDir === 'asc' ? 'desc' : 'asc' });
+      return;
     }
-  }
-  content.append(list);
-
-  renderAdminShell(content, '/admin/tasks');
-
-  document.getElementById('new-task')?.addEventListener('click', () => {
-    const form = createTaskForm(profiles, async () => {
-      close();
-      await renderAdminTasks();
+    onChange({
+      sortKey: key,
+      sortDir: key === 'due' || key === 'created' ? 'desc' : 'asc',
     });
-    const close = showModal('New Task', form);
+  });
+
+  return btn;
+}
+
+function filterTasks(
+  tasks: Task[],
+  state: TaskListState,
+  assignments: TaskAssignment[]
+): Task[] {
+  const query = state.search.trim().toLowerCase();
+
+  return tasks.filter((task) => {
+    if (!state.statuses.has(task.status)) return false;
+
+    const assignedIds = getTaskAssigneeIds(task.id, assignments);
+    if (state.assignee === 'unassigned' && assignedIds.length > 0) return false;
+    if (state.assignee !== 'all' && state.assignee !== 'unassigned' && !assignedIds.includes(state.assignee)) {
+      return false;
+    }
+
+    if (state.flag === 'open_slot' && !task.open_slot) return false;
+    if (state.flag === 'visit' && !task.visit_specific) return false;
+    if (state.flag === 'mom_hub' && !task.show_on_mother_hub) return false;
+
+    if (query) {
+      const haystack = `${task.title} ${task.description ?? ''}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+
+    return true;
   });
 }
 
-function renderTaskCard(
+function statusesMatchDefault(statuses: Set<Task['status']>): boolean {
+  if (statuses.size !== DEFAULT_VISIBLE_STATUSES.size) return false;
+  for (const status of DEFAULT_VISIBLE_STATUSES) {
+    if (!statuses.has(status)) return false;
+  }
+  return true;
+}
+
+function sortTasks(
+  tasks: Task[],
+  state: TaskListState,
+  profiles: Profile[],
+  assignments: TaskAssignment[]
+): Task[] {
+  const dir = state.sortDir === 'asc' ? 1 : -1;
+
+  const assigneeLabel = (task: Task): string => {
+    const ids = getTaskAssigneeIds(task.id, assignments);
+    const names = profiles
+      .filter((p) => ids.includes(p.id))
+      .map((p) => p.display_name)
+      .sort((a, b) => a.localeCompare(b));
+    return names[0] ?? '';
+  };
+
+  return [...tasks].sort((a, b) => {
+    let cmp = 0;
+
+    switch (state.sortKey) {
+      case 'title':
+        cmp = a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+        break;
+      case 'status':
+        cmp = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
+        break;
+      case 'assigned':
+        cmp = assigneeLabel(a).localeCompare(assigneeLabel(b), undefined, { sensitivity: 'base' });
+        break;
+      case 'due': {
+        const aDue = a.due_at ? new Date(a.due_at).getTime() : null;
+        const bDue = b.due_at ? new Date(b.due_at).getTime() : null;
+        if (aDue === null && bDue === null) cmp = 0;
+        else if (aDue === null) cmp = 1;
+        else if (bDue === null) cmp = -1;
+        else cmp = aDue - bDue;
+        break;
+      }
+      case 'created':
+        cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        break;
+    }
+
+    if (cmp !== 0) return cmp * dir;
+    return a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+  });
+}
+
+function openTaskEditorModal(
+  task: Task,
+  profiles: Profile[],
+  assignedIds: string[],
+  refresh: () => void | Promise<void>
+): void {
+  const form = createTaskForm(
+    profiles,
+    async () => { close(); await refresh(); },
+    task,
+    assignedIds,
+    async () => {
+      if (!await confirmDialog('Delete this task?')) return;
+      await api.deleteTask(task.id);
+      close();
+      await refresh();
+    }
+  );
+  const close = showModal('Edit Task', form);
+}
+
+function renderTaskRow(
   task: Task,
   profiles: Profile[],
   assignments: TaskAssignment[],
-  refresh: () => void
-): HTMLElement {  const assignedIds = getTaskAssigneeIds(task.id, assignments);
+  refresh: () => void | Promise<void>
+): HTMLElement {
+  const assignedIds = getTaskAssigneeIds(task.id, assignments);
   const assignedNames = profiles.filter((p) => assignedIds.includes(p.id)).map((p) => p.display_name);
-  const flagBadges = el('div', { className: 'task-card-flag-badges' });
+  const flagBadges = el('div', { className: 'task-row-flag-badges' });
   if (task.open_slot) flagBadges.append(el('span', { className: 'badge badge-pending' }, 'Open slot'));
   if (task.visit_specific) flagBadges.append(el('span', { className: 'badge task-badge-visit' }, 'Visit'));
   if (task.show_on_mother_hub) flagBadges.append(el('span', { className: 'badge badge-completed' }, 'Mom hub'));
@@ -56,84 +357,60 @@ function renderTaskCard(
     flagBadges.append(el('span', { className: 'card-table-muted' }, '—'));
   }
 
-  const actions = el('div', { className: 'card-table-actions' },
-    el('button', { className: 'btn btn-secondary', type: 'button' }, 'Edit'),
-    el('button', { className: 'btn btn-danger', type: 'button' }, 'Delete')
-  );
-
-  actions.querySelector('.btn-secondary')?.addEventListener('click', () => {
-    const form = createTaskForm(profiles, async () => { close(); await refresh(); }, task, assignedIds);
-    const close = showModal('Edit Task', form);
-  });
-
-  actions.querySelector('.btn-danger')?.addEventListener('click', async () => {
-    if (await confirmDialog('Delete this task?')) {
-      await api.deleteTask(task.id);
+  const actions = el('div', { className: 'card-table-actions' });
+  if (task.status !== 'completed') {
+    const completeBtn = el('button', { className: 'btn btn-primary', type: 'button' }, 'Mark complete');
+    completeBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await api.updateTask(task.id, { status: 'completed' });
       await refresh();
-    }
-  });
+    });
+    actions.append(completeBtn);
+  }
 
-  const header = el('div', { className: 'task-card-header' },
-    el('h3', { className: 'task-card-title' }, task.title),
+  const titleCell = el('span', { className: 'admin-task-title' }, task.title);
+  if (task.description) {
+    titleCell.title = task.description;
+  }
+  if (task.checklist.length > 0) {
+    const done = task.checklist.filter((c) => c.done).length;
+    titleCell.append(
+      el('span', { className: 'admin-task-checklist-hint card-table-muted' },
+        `${done}/${task.checklist.length} checklist`
+      )
+    );
+  }
+
+  const statusLabel = task.status === 'in_progress' ? 'In progress' : task.status;
+
+  const row = el('div', { className: 'admin-task-row card-table-row card-table-row--admin-task admin-task-row--clickable' },
+    titleCell,
+    el('span', {},
+      el('span', { className: `badge badge-${task.status === 'completed' ? 'completed' : 'pending'}` }, statusLabel)
+    ),
+    el('span', {},
+      assignedNames.length > 0
+        ? assignedNames.join(', ')
+        : el('span', { className: 'card-table-muted' }, 'Unassigned')
+    ),
+    el('span', {},
+      task.due_at
+        ? formatDate(task.due_at)
+        : el('span', { className: 'card-table-muted' }, '—')
+    ),
+    el('span', {}, flagBadges),
     actions
   );
-
-  const cardChildren: HTMLElement[] = [header];
-
-  if (task.description) {
-    cardChildren.push(el('p', { className: 'task-card-description' }, task.description));
-  }
-
-  const table = el('div', { className: 'card-table task-card-table' },
-    el('div', { className: 'card-table-header' },
-      el('div', { className: 'card-table-row card-table-row--admin-task' },
-        el('span', {}, 'Status'),
-        el('span', {}, 'Assigned'),
-        el('span', {}, 'Due'),
-        el('span', {}, 'Flags')
-      )
-    ),
-    el('div', { className: 'card-table-body' },
-      el('div', { className: 'card-table-row card-table-row--admin-task' },
-        el('span', {},
-          el('span', { className: `badge badge-${task.status === 'completed' ? 'completed' : 'pending'}` }, task.status)
-        ),
-        el('span', {},
-          assignedNames.length > 0
-            ? assignedNames.join(', ')
-            : el('span', { className: 'card-table-muted' }, 'Unassigned')
-        ),
-        el('span', {},          task.due_at
-            ? formatDate(task.due_at)
-            : el('span', { className: 'card-table-muted' }, '—')
-        ),
-        el('span', {}, flagBadges)
-      )
-    )
-  );
-  cardChildren.push(table);
-
-  if (task.checklist.length > 0) {
-    const checklist = el('div', { className: 'task-card-checklist' });
-    for (const item of task.checklist) {
-      checklist.append(
-        el('div', { className: 'checklist-item checklist-item--compact' },
-          el('input', { type: 'checkbox', checked: item.done ? 'true' : undefined, disabled: 'true' }),
-          item.text
-        )
-      );
-    }
-    cardChildren.push(checklist);
-  }
-
-  return el('div', { className: 'card task-card' }, ...cardChildren);
+  row.addEventListener('click', () => openTaskEditorModal(task, profiles, assignedIds, refresh));
+  return row;
 }
 
 function createTaskForm(
   profiles: Profile[],
   onSuccess: () => void,
   existing?: Task,
-  assignedIds: string[] = []
+  assignedIds: string[] = [],
+  onDelete?: () => void | Promise<void>
 ): HTMLElement {
   const session = getSession();
   const form = el('form', { className: 'modal-body task-form' });
@@ -227,7 +504,18 @@ function createTaskForm(
   form.append(checklistGroup);
 
   const errorEl = el('p', { style: 'color:var(--color-danger);display:none' });
-  form.append(errorEl, el('button', { className: 'btn btn-primary btn-block', type: 'submit' }, existing ? 'Save' : 'Create Task'));
+  const footer = el('div', { className: 'task-form-footer' },
+    el('button', { className: 'btn btn-primary btn-block', type: 'submit' }, existing ? 'Save' : 'Create Task')
+  );
+  if (existing && onDelete) {
+    const deleteBtn = el('button', { className: 'btn btn-danger btn-block', type: 'button' }, 'Delete task');
+    deleteBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await onDelete();
+    });
+    footer.append(deleteBtn);
+  }
+  form.append(errorEl, footer);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

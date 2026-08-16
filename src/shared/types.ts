@@ -80,6 +80,20 @@ export interface RecurringCheckWithStatus extends RecurringCheck {
   last_completion: RecurringCheckCompletion | null;
 }
 
+export interface ResponsibilityArea {
+  id: string;
+  title: string;
+  description: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ResponsibilityAssignment {
+  id: string;
+  area_id: string;
+  profile_id: string;
+}
+
 export interface Reminder {
   id: string;
   body: string;

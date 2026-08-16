@@ -1,11 +1,12 @@
 # Deploy the create-user edge function to Supabase.
-# Usage:
+# Set SUPABASE_ACCESS_TOKEN in .env or:
 #   $env:SUPABASE_ACCESS_TOKEN = "sbp_..."
-#   .\scripts\deploy-create-user.ps1
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $ProjectRoot
+
+. "$ProjectRoot\scripts\load-dotenv.ps1" -ProjectRoot $ProjectRoot
 
 if (-not $env:SUPABASE_ACCESS_TOKEN) {
   Write-Host "Set your access token first:" -ForegroundColor Yellow

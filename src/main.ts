@@ -16,6 +16,7 @@ import { renderAdminTasks } from './personas/admin/tasks';
 import { renderAdminCalendar } from './personas/admin/calendar';
 import { renderAdminReminders } from './personas/admin/reminders';
 import { renderAdminChecks } from './personas/admin/checks';
+import { renderAdminResponsibility } from './personas/admin/responsibility';
 import { renderAdminFinance } from './personas/admin/finance';
 import { renderAdminDocuments } from './personas/admin/documents';
 import { renderAdminVisits } from './personas/admin/visits';
@@ -101,6 +102,11 @@ function registerRoutes(): void {
     await renderAdminTasks();
   });
 
+  registerRoute('/admin/responsibility', async () => {
+    if (!(await guardAdmin())) return;
+    await renderAdminResponsibility();
+  });
+
   registerRoute('/admin/calendar', async () => {
     if (!(await guardAdmin())) return;
     await renderAdminCalendar();
@@ -179,17 +185,30 @@ function registerRoutes(): void {
   registerRoute('/google-callback', async () => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
-    if (code) {
+    const oauthError = params.get('error');
+    if (oauthError) {
+      sessionStorage.setItem('google-oauth-error', params.get('error_description') ?? oauthError);
+    } else if (code) {
       try {
         const { isSupabaseConfigured, getSupabase } = await import('./shared/supabase');
         if (isSupabaseConfigured) {
-          await getSupabase().functions.invoke('google-calendar-sync', {
+          const { data, error } = await getSupabase().functions.invoke('google-calendar-sync', {
             body: { action: 'oauth', code, redirect_uri: `${window.location.origin}/google-callback` },
           });
-          await api.logActivity('calendar.oauth_connect');
+          const payload = (data ?? {}) as { error?: string };
+          if (payload.error) {
+            sessionStorage.setItem('google-oauth-error', payload.error);
+          } else if (error) {
+            sessionStorage.setItem('google-oauth-error', error.message);
+          } else {
+            sessionStorage.setItem('google-oauth-success', '1');
+            await api.logActivity('calendar.oauth_connect');
+          }
         }
-      } catch {
-        console.warn('Google OAuth callback — configure Supabase edge function to complete setup.');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'OAuth setup failed';
+        sessionStorage.setItem('google-oauth-error', message);
+        console.warn('Google OAuth callback failed:', message);
       }
     }
     window.location.hash = '/admin/settings';

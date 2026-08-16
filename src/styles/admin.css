@@ -417,77 +417,177 @@
   margin-bottom: 1.5rem;
 }
 
-.admin-task-list {
+.admin-task-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.admin-task-page-header h2 {
+  margin: 0;
+}
+
+.admin-task-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.65rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.admin-task-filter-input,
+.admin-task-filter-select {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 0.4rem);
+  background: var(--color-surface, #fff);
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--color-text);
+}
+
+.admin-task-status-toggles {
+  display: inline-flex;
+  align-items: stretch;
+  border: 2px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface, #fff);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.admin-task-status-toggles button {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.9rem;
+  border: none;
+  border-right: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.admin-task-status-toggles button:last-child {
+  border-right: none;
+}
+
+.admin-task-status-toggles button:hover:not(.active) {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--color-text);
+}
+
+.admin-task-status-toggles button.active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.admin-task-status-toggles button.active:not(:last-child) {
+  border-right-color: rgba(255, 255, 255, 0.35);
+}
+
+.admin-task-filter-input {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+}
+
+.admin-task-filter-select {
+  flex: 0 1 auto;
+}
+
+.admin-task-clear-filters {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.admin-task-summary {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+}
+
+.admin-task-table {
+  padding: 0.65rem 1rem 0.75rem;
+}
+
+.admin-task-table .card-table-header .card-table-row {
+  align-items: end;
+}
+
+.admin-task-list .card-table-row {
+  padding: 0.45rem 0;
+}
+
+.admin-task-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  text-align: left;
+}
+
+.admin-task-sort-btn:hover,
+.admin-task-sort-btn.active {
+  color: var(--color-primary-dark);
+}
+
+.admin-task-title {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
-}
-
-.task-card {
-  padding: 0.75rem 1rem;
-}
-
-.task-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.35rem;
-}
-
-.task-card-title {
-  margin: 0;
-  font-size: 1.05rem;
-  line-height: 1.3;
+  gap: 0.1rem;
+  font-weight: 600;
   min-width: 0;
 }
 
-.task-card-description {
-  margin: 0 0 0.45rem;
-  color: var(--color-text-muted);
-  font-size: 0.85rem;
-  line-height: 1.35;
+.admin-task-checklist-hint {
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
-.task-card-table {
-  margin-top: 0.15rem;
-}
-
-.task-card-table .card-table-header .card-table-row {
-  padding: 0.1rem 0 0.25rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.task-card-table .card-table-body .card-table-row {
-  padding: 0.35rem 0 0.15rem;
-  border-bottom: none;
-}
-
-.task-card-flag-badges {
+.task-row-flag-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
 }
 
-.task-card-flag-badges .badge {
+.task-row-flag-badges .badge {
   font-size: 0.72rem;
   padding: 0.15rem 0.4rem;
 }
 
-.task-card-header .card-table-actions .btn {
+.admin-task-row .card-table-actions .btn {
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
 }
 
-.task-card-checklist {
-  margin-top: 0.45rem;
-  padding-top: 0.45rem;
-  border-top: 1px solid var(--color-border);
+.admin-task-row--clickable {
+  cursor: pointer;
 }
 
-.checklist-item--compact {
-  font-size: 0.85rem;
-  padding: 0.15rem 0;
+.admin-task-row--clickable:hover {
+  background: #fffaf3;
+}
+
+.task-form-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .task-actions {
@@ -505,23 +605,34 @@
 }
 
 @media (max-width: 640px) {
-  .task-card-header {
-    align-items: flex-start;
+  .admin-task-toolbar {
     flex-direction: column;
+    align-items: stretch;
   }
 
-  .task-card-header .card-table-actions {
+  .admin-task-filter-input,
+  .admin-task-filter-select,
+  .admin-task-clear-filters {
     width: 100%;
-    justify-content: flex-start;
   }
 
-  .task-card-table {
+  .admin-task-status-toggles {
+    width: 100%;
+    display: flex;
+  }
+
+  .admin-task-status-toggles button {
+    flex: 1 1 0;
+    padding-inline: 0.5rem;
+  }
+
+  .admin-task-table {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
 
   .card-table-row--admin-task {
-    min-width: 28rem;
+    min-width: 36rem;
   }
 }
 

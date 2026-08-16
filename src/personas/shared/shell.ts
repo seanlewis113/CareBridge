@@ -197,6 +197,7 @@ export function renderAdminShell(content: HTMLElement, activePath: string): void
   const allItems: NavItem[] = [
     { path: '/admin', label: 'Dashboard', icon: 'layout' },
     { path: '/admin/tasks', label: 'Tasks', icon: 'clipboard-list' },
+    { path: '/admin/responsibility', label: 'Who\'s Responsible', icon: 'briefcase' },
     { path: '/admin/checks', label: 'Recurring Checks', icon: 'list' },
     { path: '/admin/calendar', label: 'Calendar', icon: 'calendar' },
     { path: '/admin/reminders', label: 'Reminders', icon: 'bell' },

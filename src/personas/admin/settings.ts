@@ -62,7 +62,22 @@ export async function renderAdminSettings(): Promise<void> {
     status.style.color = 'var(--color-success)';
   });
 
-  document.getElementById('connect-google')?.addEventListener('click', () => {
+  renderAdminShell(content, '/admin/settings');
+
+  const status = form.querySelector('#settings-status') as HTMLElement | null;
+  const oauthError = sessionStorage.getItem('google-oauth-error');
+  const oauthSuccess = sessionStorage.getItem('google-oauth-success');
+  if (status && oauthError) {
+    status.textContent = `Google Calendar connection failed: ${oauthError}`;
+    status.style.color = 'var(--color-danger, #c0392b)';
+    sessionStorage.removeItem('google-oauth-error');
+  } else if (status && oauthSuccess) {
+    status.textContent = 'Google Calendar connected successfully.';
+    status.style.color = 'var(--color-success)';
+    sessionStorage.removeItem('google-oauth-success');
+  }
+
+  form.querySelector('#connect-google')?.addEventListener('click', () => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     if (!clientId || clientId === 'your-google-client-id') {
       alert('Set VITE_GOOGLE_CLIENT_ID in your .env file first.');
@@ -73,6 +88,4 @@ export async function renderAdminSettings(): Promise<void> {
     const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
     window.location.href = url;
   });
-
-  renderAdminShell(content, '/admin/settings');
 }

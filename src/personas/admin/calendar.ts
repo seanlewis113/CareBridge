@@ -78,8 +78,10 @@ export async function renderAdminCalendar(): Promise<void> {
       const synced = await api.syncCalendarFromGoogle();
       statusEl.textContent = `Synced ${synced.length} events from Google Calendar.`;
       await renderAdminCalendar();
-    } catch {
-      statusEl.textContent = 'Google Calendar sync requires Supabase configuration. Events are stored locally in demo mode.';
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Sync failed';
+      statusEl.textContent = `Google Calendar sync failed: ${message}`;
+      statusEl.style.color = 'var(--color-danger, #c0392b)';
     }
   });
 }

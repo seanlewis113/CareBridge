@@ -15,6 +15,8 @@ import type {
   RecurringCheck,
   RecurringCheckCompletion,
   RecurringCheckWithStatus,
+  ResponsibilityArea,
+  ResponsibilityAssignment,
   MotherHubTask,
   Task,
   TaskAssignment,
@@ -63,19 +65,27 @@ interface ActivityContext {
 let activityContext: ActivityContext = { profileId: null, persona: null };
 
 let recurringChecksSchemaReady = !isSupabaseConfigured;
+let responsibilitySchemaReady = !isSupabaseConfigured;
 
 export function isRecurringChecksSchemaReady(): boolean {
   return recurringChecksSchemaReady;
 }
 
-function isMissingDbTableError(error: unknown): boolean {
+export function isResponsibilitySchemaReady(): boolean {
+  return responsibilitySchemaReady;
+}
+
+function isMissingDbTableError(error: unknown, tableHint?: string): boolean {
   if (!error || typeof error !== 'object') return false;
   const e = error as { code?: string; message?: string; details?: string };
   const text = `${e.message ?? ''} ${e.details ?? ''}`.toLowerCase();
+  const tableMatch = tableHint
+    ? text.includes(tableHint) && text.includes('does not exist')
+    : text.includes('recurring_check') && text.includes('does not exist');
   return (
     e.code === 'PGRST205' ||
     e.code === '42P01' ||
-    text.includes('recurring_check') && text.includes('does not exist') ||
+    tableMatch ||
     text.includes('could not find the table')
   );
 }
@@ -324,8 +334,23 @@ export const api = {
       const { data, error } = await db().functions.invoke('google-calendar-sync', {
         body: { action: 'pull' },
       });
-      if (error) throw error;
-      const events = (data?.events ?? []) as CalendarEvent[];
+      const payload = (data ?? {}) as { events?: CalendarEvent[]; error?: string };
+      if (payload.error) {
+        throw new Error(payload.error);
+      }
+      if (error) {
+        const context = (error as { context?: { json?: () => Promise<{ error?: string }> } }).context;
+        if (context?.json) {
+          try {
+            const errBody = await context.json();
+            if (errBody?.error) throw new Error(errBody.error);
+          } catch (parseErr) {
+            if (parseErr instanceof Error && parseErr.message !== error.message) throw parseErr;
+          }
+        }
+        throw error;
+      }
+      const events = (payload.events ?? []) as CalendarEvent[];
       await this.logActivity('calendar.sync', { metadata: { event_count: events.length } });
       return events;
     }
@@ -871,6 +896,201 @@ export const api = {
     updateLocal('recurring_check_completions', (items) => [completion, ...items]);
     notifyLocalDataChange('recurring_checks');
     return completion;
+  },
+
+  async getResponsibilityAreas(): Promise<ResponsibilityArea[]> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await db()
+        .from('responsibility_areas')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (error) {
+        if (isMissingDbTableError(error, 'responsibility')) {
+          responsibilitySchemaReady = false;
+          return [];
+        }
+        throw error;
+      }
+      responsibilitySchemaReady = true;
+      return data as ResponsibilityArea[];
+    }
+    return getLocal('responsibility_areas') ?? [];
+  },
+
+  async getResponsibilityAssignments(): Promise<ResponsibilityAssignment[]> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await db().from('responsibility_assignments').select('*');
+      if (error) {
+        if (isMissingDbTableError(error, 'responsibility')) {
+          responsibilitySchemaReady = false;
+          return [];
+        }
+        throw error;
+      }
+      return data as ResponsibilityAssignment[];
+    }
+    return getLocal('responsibility_assignments') ?? [];
+  },
+
+  async createResponsibilityArea(
+    area: Omit<ResponsibilityArea, 'id' | 'created_at'>
+  ): Promise<ResponsibilityArea> {
+    const newArea: ResponsibilityArea = {
+      ...area,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+    };
+    if (isSupabaseConfigured) {
+      if (!responsibilitySchemaReady) {
+        throw new Error(
+          'Who\'s Responsible tables are not set up yet. Run supabase/migrations/20260816130000_whos_responsible.sql in the Supabase SQL editor.'
+        );
+      }
+      const { data, error } = await db()
+        .from('responsibility_areas')
+        .insert(newArea)
+        .select()
+        .single();
+      if (error) {
+        if (isMissingDbTableError(error, 'responsibility')) {
+          responsibilitySchemaReady = false;
+          throw new Error(
+            'Who\'s Responsible tables are not set up yet. Run supabase/migrations/20260816130000_whos_responsible.sql in the Supabase SQL editor.'
+          );
+        }
+        throw error;
+      }
+      await this.logActivity('responsibility.create', {
+        entityType: 'responsibility_area',
+        entityId: (data as ResponsibilityArea).id,
+        metadata: { title: newArea.title },
+      });
+      return data as ResponsibilityArea;
+    }
+    updateLocal('responsibility_areas', (items) => [...items, newArea]);
+    notifyLocalDataChange('responsibility_areas');
+    return newArea;
+  },
+
+  async updateResponsibilityArea(
+    id: string,
+    updates: Partial<ResponsibilityArea>
+  ): Promise<ResponsibilityArea> {
+    if (isSupabaseConfigured) {
+      const { data: before, error: beforeError } = await db()
+        .from('responsibility_areas')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (beforeError) throw beforeError;
+      const { data, error } = await db()
+        .from('responsibility_areas')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      await this.logActivity('responsibility.update', {
+        entityType: 'responsibility_area',
+        entityId: id,
+        metadata: { changes: updates, previous: pickPrevious(before as ResponsibilityArea, updates) },
+      });
+      return data as ResponsibilityArea;
+    }
+    let updated!: ResponsibilityArea;
+    updateLocal('responsibility_areas', (items) =>
+      items.map((a) => {
+        if (a.id === id) {
+          updated = { ...a, ...updates };
+          return updated;
+        }
+        return a;
+      })
+    );
+    notifyLocalDataChange('responsibility_areas');
+    return updated;
+  },
+
+  async deleteResponsibilityArea(id: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { data: snapshot, error: fetchError } = await db()
+        .from('responsibility_areas')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (fetchError) throw fetchError;
+      const { error } = await db().from('responsibility_areas').delete().eq('id', id);
+      if (error) throw error;
+      await this.logActivity('responsibility.delete', {
+        entityType: 'responsibility_area',
+        entityId: id,
+        metadata: { snapshot, title: (snapshot as ResponsibilityArea).title },
+      });
+      return;
+    }
+    updateLocal('responsibility_areas', (items) => items.filter((a) => a.id !== id));
+    updateLocal('responsibility_assignments', (items) => items.filter((a) => a.area_id !== id));
+    notifyLocalDataChange('responsibility_areas');
+  },
+
+  async assignResponsibility(areaId: string, profileId: string): Promise<ResponsibilityAssignment> {
+    const profile = await this.getProfile(profileId);
+    const existingAssignments = await this.getResponsibilityAssignments();
+    const existing = existingAssignments.find(
+      (a) => a.area_id === areaId && a.profile_id === profileId
+    );
+    if (existing) return existing;
+
+    const assignment: ResponsibilityAssignment = {
+      id: crypto.randomUUID(),
+      area_id: areaId,
+      profile_id: profileId,
+    };
+    if (isSupabaseConfigured) {
+      const { data, error } = await db()
+        .from('responsibility_assignments')
+        .insert(assignment)
+        .select()
+        .single();
+      if (error) throw error;
+      await this.logActivity('responsibility.assign', {
+        entityType: 'responsibility_area',
+        entityId: areaId,
+        metadata: {
+          profile_id: profileId,
+          display_name: profile?.display_name ?? 'Unknown',
+        },
+      });
+      return data as ResponsibilityAssignment;
+    }
+    updateLocal('responsibility_assignments', (items) => [...items, assignment]);
+    notifyLocalDataChange('responsibility_areas');
+    return assignment;
+  },
+
+  async unassignResponsibility(areaId: string, profileId: string): Promise<void> {
+    const profile = await this.getProfile(profileId);
+    if (isSupabaseConfigured) {
+      const { error } = await db()
+        .from('responsibility_assignments')
+        .delete()
+        .eq('area_id', areaId)
+        .eq('profile_id', profileId);
+      if (error) throw error;
+      await this.logActivity('responsibility.unassign', {
+        entityType: 'responsibility_area',
+        entityId: areaId,
+        metadata: {
+          profile_id: profileId,
+          display_name: profile?.display_name ?? 'Unknown',
+        },
+      });
+      return;
+    }
+    updateLocal('responsibility_assignments', (items) =>
+      items.filter((a) => !(a.area_id === areaId && a.profile_id === profileId))
+    );
+    notifyLocalDataChange('responsibility_areas');
   },
 
   async getVisitNotes(): Promise<VisitNote[]> {
