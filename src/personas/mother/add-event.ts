@@ -1,8 +1,11 @@
 import { api } from '../../shared/api';
 import {
+  buildEventTimestamps,
   buildRecurringDescription,
+  getEventDateSpan,
   getEventPlainDescription,
   getSourceEventId,
+  isUntimedEvent,
   parseRecurringRule,
   type EventRecurrenceRule,
 } from '../../shared/calendarRecurrence';
@@ -12,6 +15,7 @@ import { el, showModal, todayISO } from '../../shared/utils';
 
 export interface EventFormOptions {
   event?: CalendarEvent;
+  occurrence?: CalendarEvent;
   onSuccess: () => void;
 }
 
@@ -19,12 +23,15 @@ export function renderAddEventForm(onSuccess: () => void): HTMLElement {
   return renderEventForm({ onSuccess });
 }
 
-export function renderEventForm({ event, onSuccess }: EventFormOptions): HTMLElement {
+export function renderEventForm({ event, occurrence, onSuccess }: EventFormOptions): HTMLElement {
   const isEdit = !!event;
+  const displayEvent = occurrence ?? event;
   const recurrenceRule = event ? parseRecurringRule(event) : null;
   const plainDescription = event ? getEventPlainDescription(event) : '';
-  const startDate = event?.start_at.slice(0, 10) ?? todayISO();
-  const startTime = event?.start_at.slice(11, 16) ?? '';
+  const eventSpan = displayEvent ? getEventDateSpan(displayEvent) : null;
+  const startDate = eventSpan?.startKey ?? todayISO();
+  const endDate = eventSpan?.endKey ?? startDate;
+  const startTime = displayEvent && !isUntimedEvent(displayEvent) ? displayEvent.start_at.slice(11, 16) : '';
 
   const form = el('form', { className: 'mother-add-form modal-body' });
 
@@ -39,17 +46,42 @@ export function renderEventForm({ event, onSuccess }: EventFormOptions): HTMLEle
     })
   );
 
-  const dateGroup = el('div', { className: 'form-group' },
-    el('label', { for: 'event-date' }, 'Date'),
-    el('input', { type: 'date', id: 'event-date', required: 'true', value: startDate })
+  const startDateInput = el('input', {
+    type: 'date',
+    id: 'event-start-date',
+    required: 'true',
+    value: startDate,
+  }) as HTMLInputElement;
+  const endDateInput = el('input', {
+    type: 'date',
+    id: 'event-end-date',
+    required: 'true',
+    value: endDate,
+    min: startDate,
+  }) as HTMLInputElement;
+  const startDateGroup = el('div', { className: 'form-group' },
+    el('label', { for: 'event-start-date' }, 'Start date'),
+    startDateInput
   );
+  const endDateGroup = el('div', { className: 'form-group' },
+    el('label', { for: 'event-end-date' }, 'End date'),
+    endDateInput
+  );
+  const dateRow = el('div', { className: 'form-row-two mother-add-date-time-row' }, startDateGroup, endDateGroup);
 
-  const { group: timeGroup } = createClockPickerField('Time', {
+  const { group: timeGroup, picker: timePicker } = createClockPickerField('Time', {
     id: 'event-time',
     value: startTime,
     required: false,
   });
-  const dateTimeRow = el('div', { className: 'form-row-two mother-add-date-time-row' }, dateGroup, timeGroup);
+  const syncDateBounds = () => {
+    endDateInput.min = startDateInput.value;
+    if (endDateInput.value && endDateInput.value < startDateInput.value) {
+      endDateInput.value = startDateInput.value;
+    }
+  };
+  startDateInput.addEventListener('change', syncDateBounds);
+  syncDateBounds();
 
   const recurrenceSelect = el('select', { id: 'event-recurrence' },
     el('option', { value: 'none' }, 'Does not repeat'),
@@ -109,20 +141,29 @@ export function renderEventForm({ event, onSuccess }: EventFormOptions): HTMLEle
     type: 'submit',
   }, isEdit ? 'Save Changes' : 'Save Event');
 
-  form.append(titleGroup, dateTimeRow, recurrenceGroup, occurrenceGroup, errorEl, submitBtn);
+  form.append(titleGroup, dateRow, timeGroup, recurrenceGroup, occurrenceGroup, errorEl, submitBtn);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const title = (form.querySelector('#event-title') as HTMLInputElement).value.trim();
-    const date = (form.querySelector('#event-date') as HTMLInputElement).value;
-    const time = (form.querySelector('#event-time') as HTMLInputElement).value.trim();
+    const startDateValue = startDateInput.value;
+    const endDateValue = endDateInput.value;
+    const time = timePicker.getValue().trim();
     const recurrenceValue = recurrenceSelect.value;
     const noEndDate = noEndDateCheckbox.checked;
     const recurrenceCount = Math.max(2, Math.min(365, Number.parseInt(occurrenceInput.value || '26', 10) || 26));
-    const safeTime = time || '00:00';
-    const startAt = `${date}T${safeTime}:00`;
-    const endDate = new Date(startAt);
-    endDate.setHours(endDate.getHours() + 1);
+
+    if (endDateValue < startDateValue) {
+      errorEl.textContent = 'End date must be on or after the start date.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    const { start_at: startAt, end_at: endAt } = buildEventTimestamps(startDateValue, endDateValue, time);
+    const datesUnchanged = startDateValue === startDate && endDateValue === endDate;
+    const seriesTimestamps = recurrenceRule && datesUnchanged && event
+      ? { start_at: event.start_at, end_at: event.end_at }
+      : { start_at: startAt, end_at: endAt };
     const nextRecurrenceRule: EventRecurrenceRule | null = recurrenceValue === 'none'
       ? null
       : {
@@ -136,15 +177,15 @@ export function renderEventForm({ event, onSuccess }: EventFormOptions): HTMLEle
       if (isEdit && event) {
         await api.updateCalendarEvent(getSourceEventId(event.id), {
           title,
-          start_at: startAt,
-          end_at: endDate.toISOString().slice(0, 19),
+          start_at: seriesTimestamps.start_at,
+          end_at: seriesTimestamps.end_at,
           description,
         });
       } else {
         await api.createCalendarEvent({
           title,
-          start_at: startAt,
-          end_at: endDate.toISOString().slice(0, 19),
+          start_at: seriesTimestamps.start_at,
+          end_at: seriesTimestamps.end_at,
           description,
           google_event_id: null,
           created_by: null,
@@ -164,7 +205,9 @@ export async function openEventEditorModal(
   event: CalendarEvent | undefined,
   onSuccess: () => void | Promise<void>
 ): Promise<void> {
-  let source = event;
+  let source: CalendarEvent | undefined;
+  let occurrence: CalendarEvent | undefined;
+
   if (event) {
     const loaded = await api.getCalendarEvent(event.id);
     if (!loaded) {
@@ -172,10 +215,14 @@ export async function openEventEditorModal(
       return;
     }
     source = loaded;
+    const clickedOccurrence = event.id !== getSourceEventId(event.id)
+      || (event.recurrence_index != null && event.recurrence_index > 0);
+    occurrence = clickedOccurrence ? event : undefined;
   }
 
   const form = renderEventForm({
     event: source,
+    occurrence,
     onSuccess: () => {
       close();
       void onSuccess();

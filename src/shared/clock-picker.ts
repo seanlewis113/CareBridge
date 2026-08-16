@@ -97,6 +97,11 @@ function snapMinute(minute: number): number {
   return Math.round(minute / 5) * 5 % 60;
 }
 
+function normalizeTimeValue(value: string): string {
+  const trimmed = value.trim();
+  return trimmed === '00:00' ? '' : trimmed;
+}
+
 function handDeg(value: number, max: number): number {
   return (value / max) * 360;
 }
@@ -296,7 +301,7 @@ function ensureModal(): void {
 
 export function createClockPicker(options: ClockPickerOptions): ClockPicker {
   const { id, required = false, large = false, label = 'Time', placeholder = 'Select time' } = options;
-  const initialValue = options.value ?? '';
+  const initialValue = normalizeTimeValue(options.value ?? '');
 
   const hiddenInput = el('input', {
     type: 'hidden',
@@ -344,11 +349,12 @@ export function createClockPicker(options: ClockPickerOptions): ClockPicker {
     element: container,
     getValue: () => hiddenInput.value,
     setValue: (value: string) => {
-      if (!value) {
+      const normalized = normalizeTimeValue(value);
+      if (!normalized) {
         clear();
         return;
       }
-      const parsed = parseTime24(value);
+      const parsed = parseTime24(normalized);
       hiddenInput.value = toTime24(parsed);
       setTriggerState(trigger, hiddenInput.value, placeholder, clearBtn);
     },

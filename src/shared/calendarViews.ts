@@ -1,6 +1,7 @@
 import type { CalendarEvent } from './types';
 import { el, formatDate, formatTime } from './utils';
 import { icon, type IconName } from './icons';
+import { getEventDateSpan } from './calendarRecurrence';
 
 interface EventSpan {
   startKey: string;
@@ -51,7 +52,7 @@ export interface CalendarGridOptions {
 export function groupEventsByDay(events: CalendarEvent[]): [string, CalendarEvent[]][] {
   const map = new Map<string, CalendarEvent[]>();
   for (const event of events) {
-    const day = event.start_at.slice(0, 10);
+    const day = getEventDateSpan(event).startKey;
     if (!map.has(day)) map.set(day, []);
     map.get(day)!.push(event);
   }
@@ -239,23 +240,8 @@ function parseDateKey(key: string): Date {
   return new Date(year, month - 1, day);
 }
 
-function addDaysToKey(key: string, days: number): string {
-  const date = parseDateKey(key);
-  date.setDate(date.getDate() + days);
-  return toLocalDateKey(date);
-}
-
 function getEventSpan(event: CalendarEvent): EventSpan {
-  if (event.start_at.length === 10) {
-    const startKey = event.start_at;
-    const endExclusive = event.end_at.slice(0, 10);
-    const endKey = addDaysToKey(endExclusive, -1);
-    return { startKey, endKey: endKey < startKey ? startKey : endKey };
-  }
-
-  const startKey = toLocalDateKey(new Date(event.start_at));
-  const endKey = toLocalDateKey(new Date(event.end_at));
-  return { startKey, endKey };
+  return getEventDateSpan(event);
 }
 
 function isMultiDayEvent(event: CalendarEvent): boolean {
@@ -272,7 +258,7 @@ function buildSingleDayEventMap(events: CalendarEvent[]): Map<string, CalendarEv
   const map = new Map<string, CalendarEvent[]>();
   for (const event of events) {
     if (isMultiDayEvent(event)) continue;
-    const day = event.start_at.length === 10 ? event.start_at : toLocalDateKey(new Date(event.start_at));
+    const day = getEventDateSpan(event).startKey;
     if (!map.has(day)) map.set(day, []);
     map.get(day)!.push(event);
   }
@@ -363,16 +349,24 @@ function assignWeekLanes(segments: Omit<WeekSegment, 'lane'>[]): WeekSegment[] {
   return placed;
 }
 
+function getEventToneClass(seed: string | number): string {
+  const value = typeof seed === 'number'
+    ? seed
+    : seed.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return `app-calendar-event-tone-${Math.abs(value) % 4}`;
+}
+
 function renderGridDayEvent(event: CalendarEvent, options: CalendarGridOptions): HTMLElement {
+  const toneClass = getEventToneClass(event.id);
   const eventNode = options.onEdit
     ? el('button', {
       type: 'button',
-      className: 'app-calendar-day-event app-calendar-day-event--clickable',
+      className: `app-calendar-day-event app-calendar-day-event--clickable ${toneClass}`,
       'aria-label': `Edit ${event.title}`,
     },
       el('span', { className: 'app-calendar-day-event-title' }, event.title)
     )
-    : el('div', { className: 'app-calendar-day-event' },
+    : el('div', { className: `app-calendar-day-event ${toneClass}` },
       el('span', { className: 'app-calendar-day-event-title' }, event.title)
     );
 
@@ -386,6 +380,7 @@ function renderGridDayEvent(event: CalendarEvent, options: CalendarGridOptions):
 function renderWeekSpanEvent(segment: WeekSegment, options: CalendarGridOptions): HTMLElement {
   const classes = [
     'app-calendar-span-event',
+    getEventToneClass(segment.lane),
     segment.isStart ? 'app-calendar-span-event--start' : 'app-calendar-span-event--continue',
     segment.isEnd ? 'app-calendar-span-event--end' : 'app-calendar-span-event--extend',
     options.onEdit ? 'app-calendar-span-event--clickable' : '',

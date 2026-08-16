@@ -143,18 +143,20 @@
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 0.35rem;
-  grid-template-rows: repeat(var(--span-lanes, 0), 1.05rem);
+  row-gap: 0.16rem;
+  grid-template-rows: repeat(var(--span-lanes, 0), 1rem);
   pointer-events: none;
   z-index: 1;
 }
 
 .app-calendar-day {
+  position: relative;
   min-height: 94px;
   background: white;
   border: 1px solid #f2dfca;
   border-radius: 0.6rem;
   padding: 0.35rem;
-  padding-top: calc(0.35rem + var(--span-lanes, 0) * 1.05rem);
+  padding-top: calc(1.1rem + var(--span-lanes, 0) * 1.16rem);
   display: flex;
   flex-direction: column;
   gap: 0.22rem;
@@ -181,23 +183,58 @@
 }
 
 .app-calendar-day-number {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  z-index: 2;
   font-size: 0.76rem;
   font-weight: 800;
+  line-height: 1;
   color: var(--color-primary-dark);
 }
 
 .app-calendar-day-events {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.28rem;
   overflow: hidden;
+}
+
+.app-calendar-day-event,
+.app-calendar-span-event {
+  box-shadow: inset 0 0 0 1px rgba(44, 36, 22, 0.08);
 }
 
 .app-calendar-day-event {
   display: block;
-  background: var(--color-primary-light);
   border-radius: 0.45rem;
-  padding: 0.16rem 0.24rem;
+  padding: 0.16rem 0.28rem 0.16rem 0.24rem;
+}
+
+.app-calendar-event-tone-0 {
+  background: #fdebd0;
+  border-left: 3px solid #e67e22;
+}
+
+.app-calendar-event-tone-1 {
+  background: #dff3e5;
+  border-left: 3px solid #27ae60;
+}
+
+.app-calendar-event-tone-2 {
+  background: #dce9f8;
+  border-left: 3px solid #4f86c6;
+}
+
+.app-calendar-event-tone-3 {
+  background: #eadcf0;
+  border-left: 3px solid #9b59b6;
+}
+
+.app-calendar-span-event--continue,
+.app-calendar-span-event--extend {
+  border-left: none;
+  padding-left: 0.3rem;
 }
 
 .app-calendar-day-event-title {
@@ -213,9 +250,8 @@
 .app-calendar-span-event {
   display: flex;
   align-items: center;
-  min-height: 1.05rem;
-  background: var(--color-primary-light);
-  padding: 0.12rem 0.3rem;
+  min-height: 1rem;
+  padding: 0.1rem 0.3rem 0.1rem 0.24rem;
   overflow: hidden;
 }
 
@@ -258,8 +294,24 @@
   transition: background var(--transition-fast);
 }
 
-.app-calendar-span-event--clickable:hover {
+.app-calendar-event-tone-0.app-calendar-span-event--clickable:hover,
+.app-calendar-event-tone-0.app-calendar-day-event--clickable:hover {
   background: #ffe8cc;
+}
+
+.app-calendar-event-tone-1.app-calendar-span-event--clickable:hover,
+.app-calendar-event-tone-1.app-calendar-day-event--clickable:hover {
+  background: #cfecd8;
+}
+
+.app-calendar-event-tone-2.app-calendar-span-event--clickable:hover,
+.app-calendar-event-tone-2.app-calendar-day-event--clickable:hover {
+  background: #ccddf3;
+}
+
+.app-calendar-event-tone-3.app-calendar-span-event--clickable:hover,
+.app-calendar-event-tone-3.app-calendar-day-event--clickable:hover {
+  background: #decee8;
 }
 
 .app-calendar-span-event--clickable:focus-visible {
@@ -274,10 +326,6 @@
   text-align: left;
   font: inherit;
   transition: background var(--transition-fast), transform var(--transition-fast);
-}
-
-.app-calendar-day-event--clickable:hover {
-  background: #ffe8cc;
 }
 
 .app-calendar-day-event--clickable:focus-visible {
