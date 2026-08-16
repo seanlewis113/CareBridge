@@ -143,7 +143,7 @@
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 0.35rem;
-  row-gap: 0.16rem;
+  row-gap: 0.3rem;
   grid-template-rows: repeat(var(--span-lanes, 0), 1rem);
   pointer-events: none;
   z-index: 1;
@@ -156,10 +156,10 @@
   border: 1px solid #f2dfca;
   border-radius: 0.6rem;
   padding: 0.35rem;
-  padding-top: calc(1.1rem + var(--span-lanes, 0) * 1.16rem);
+  padding-top: calc(1.1rem + var(--span-lanes, 0) * 1.3rem + var(--span-lanes, 0) * 0.3rem);
   display: flex;
   flex-direction: column;
-  gap: 0.22rem;
+  gap: 0.3rem;
 }
 
 .app-calendar-day--blank {
@@ -196,7 +196,7 @@
 .app-calendar-day-events {
   display: flex;
   flex-direction: column;
-  gap: 0.28rem;
+  gap: 0.35rem;
   overflow: hidden;
 }
 
