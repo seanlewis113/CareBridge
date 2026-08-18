@@ -23,7 +23,7 @@ import type {
   Transaction,
   VisitNote,
 } from './types';
-import { isHiddenTransaction } from './transactionFilters';
+import { isHiddenTransaction, isMotherHubHiddenTransaction } from './transactionFilters';
 
 type TableName = keyof ReturnType<typeof loadLocalStore>;
 
@@ -1411,7 +1411,10 @@ export const api = {
           .order('date', { ascending: false });
         if (error) throw error;
         return (data as Transaction[]).filter(
-          (t) => t.account?.display_on_mother_hub && !isHiddenTransaction(t)
+          (t) =>
+            t.account?.display_on_mother_hub &&
+            !isHiddenTransaction(t) &&
+            !isMotherHubHiddenTransaction(t)
         );
       } catch (err) {
         console.warn('Could not load mother hub transactions:', err);
@@ -1424,7 +1427,12 @@ export const api = {
       accounts.filter((a) => a.display_on_mother_hub).map((a) => a.id)
     );
     return transactions
-      .filter((t) => hubAccountIds.has(t.account_id) && !isHiddenTransaction(t))
+      .filter(
+        (t) =>
+          hubAccountIds.has(t.account_id) &&
+          !isHiddenTransaction(t) &&
+          !isMotherHubHiddenTransaction(t)
+      )
       .map((t) => ({
         ...t,
         account: accounts.find((a) => a.id === t.account_id),

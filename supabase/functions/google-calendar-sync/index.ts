@@ -3,6 +3,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
+const SYNC_DAYS = 90;
+const MS_PER_DAY = 86400000;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -55,24 +57,50 @@ serve(async (req) => {
     if (action === 'pull') {
       const calendarId = settings.google_calendar_id ?? 'primary';
       const now = new Date();
-      const weekLater = new Date(now.getTime() + 30 * 86400000);
-      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?timeMin=${now.toISOString()}&timeMax=${weekLater.toISOString()}&singleEvents=true&orderBy=startTime`;
-      const calRes = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-      const calData = await calRes.json();
-      const events = (calData.items ?? []).map((item: GoogleEvent) => ({
-        google_event_id: item.id,
-        title: item.summary ?? 'Event',
-        start_at: item.start?.dateTime ?? item.start?.date,
-        end_at: item.end?.dateTime ?? item.end?.date,
-        description: item.description ?? null,
-        synced_at: new Date().toISOString(),
-      }));
+      const syncEnd = new Date(now.getTime() + SYNC_DAYS * MS_PER_DAY);
+      const syncStartIso = now.toISOString();
+      const syncEndIso = syncEnd.toISOString();
+
+      const googleItems = await fetchGoogleCalendarEvents(
+        accessToken,
+        calendarId,
+        syncStartIso,
+        syncEndIso
+      );
+
+      const syncedAt = new Date().toISOString();
+      const events = googleItems
+        .filter((item) => item.status !== 'cancelled')
+        .map((item: GoogleEvent) => ({
+          google_event_id: item.id,
+          title: item.summary ?? 'Event',
+          start_at: item.start?.dateTime ?? item.start?.date,
+          end_at: item.end?.dateTime ?? item.end?.date,
+          description: item.description ?? null,
+          synced_at: syncedAt,
+        }));
 
       for (const ev of events) {
         await supabase.from('calendar_events').upsert(ev, { onConflict: 'google_event_id' });
       }
 
-      const { data } = await supabase.from('calendar_events').select('*').gte('start_at', now.toISOString());
+      const googleEventIds = new Set(events.map((ev) => ev.google_event_id));
+      const { data: localSynced } = await supabase
+        .from('calendar_events')
+        .select('id, google_event_id')
+        .not('google_event_id', 'is', null)
+        .gte('start_at', syncStartIso)
+        .lte('start_at', syncEndIso);
+
+      const staleIds = (localSynced ?? [])
+        .filter((row) => row.google_event_id && !googleEventIds.has(row.google_event_id))
+        .map((row) => row.id);
+
+      if (staleIds.length > 0) {
+        await supabase.from('calendar_events').delete().in('id', staleIds);
+      }
+
+      const { data } = await supabase.from('calendar_events').select('*').gte('start_at', syncStartIso);
       return json({ events: data ?? [] });
     }
 
@@ -106,6 +134,39 @@ serve(async (req) => {
   }
 });
 
+async function fetchGoogleCalendarEvents(
+  accessToken: string,
+  calendarId: string,
+  timeMin: string,
+  timeMax: string
+): Promise<GoogleEvent[]> {
+  const items: GoogleEvent[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({
+      timeMin,
+      timeMax,
+      singleEvents: 'true',
+      orderBy: 'startTime',
+      maxResults: '250',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`;
+    const calRes = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const calData = await calRes.json();
+    if (!calRes.ok) {
+      throw new Error(calData.error?.message ?? 'Failed to fetch Google Calendar events');
+    }
+
+    items.push(...(calData.items ?? []));
+    pageToken = calData.nextPageToken;
+  } while (pageToken);
+
+  return items;
+}
+
 async function getAccessToken(refreshToken: string): Promise<string> {
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -130,6 +191,7 @@ function json(data: unknown, status = 200) {
 
 interface GoogleEvent {
   id: string;
+  status?: string;
   summary?: string;
   description?: string;
   start?: { dateTime?: string; date?: string };
