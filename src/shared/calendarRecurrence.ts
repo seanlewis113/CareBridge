@@ -1,4 +1,5 @@
 import type { CalendarEvent } from './types';
+import { formatTime } from './utils';
 
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
 
@@ -18,6 +19,10 @@ export function isMidnightTimestamp(value: string): boolean {
 
 export function isUntimedEvent(event: Pick<CalendarEvent, 'start_at'>): boolean {
   return event.start_at.length === 10 || isMidnightTimestamp(event.start_at);
+}
+
+export function formatEventTime(event: Pick<CalendarEvent, 'start_at'>): string {
+  return isUntimedEvent(event) ? 'none' : formatTime(event.start_at);
 }
 
 export function parseEventInstant(value: string): Date {

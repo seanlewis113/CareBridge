@@ -526,7 +526,8 @@ button, input, select, textarea {
 }
 
 .card-table-row--events {
-  grid-template-columns: minmax(4.5rem, auto) minmax(3.5rem, auto) 1fr;
+  /* Fixed widths so header and body rows share the same column tracks */
+  grid-template-columns: 7rem 5.25rem minmax(0, 1fr);
 }
 
 .card-table-row--tx {

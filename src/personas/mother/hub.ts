@@ -9,7 +9,8 @@ import {
   renderCalendarViewToggle,
   type CalendarViewMode,
 } from '../../shared/calendarViews';
-import { el, greeting, formatDate, formatTime, formatCurrency, showModal, timeOfDayClass, showToast } from '../../shared/utils';
+import { formatEventTime } from '../../shared/calendarRecurrence';
+import { el, greeting, formatDate, formatCurrency, showModal, timeOfDayClass, showToast } from '../../shared/utils';
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm } from './add-event';
 import { ensureMotherHubRealtime, teardownMotherHubRealtime } from '../../shared/realtime';
@@ -157,7 +158,7 @@ export async function renderMotherHub(): Promise<void> {
         body.append(
           el('div', { className: 'card-table-row card-table-row--events' },
             el('span', { className: 'mother-event-day-col' }, dayLabel),
-            el('span', { className: 'mother-time-pill' }, formatTime(event.start_at)),
+            el('span', { className: 'mother-time-pill' }, formatEventTime(event)),
             el('span', { className: 'mother-event-title' }, event.title)
           )
         );

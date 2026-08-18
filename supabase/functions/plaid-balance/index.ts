@@ -118,8 +118,8 @@ async function handleExchange(
   const exchangeRes = await plaidFetch('/item/public_token/exchange', { public_token: publicToken });
   const { access_token, item_id } = exchangeRes;
 
-  const balanceRes = await plaidFetch('/accounts/balance/get', { access_token });
-  const chimeAccount = selectChimeAccount(balanceRes.accounts);
+  const accounts = await fetchAccountBalances(access_token);
+  const chimeAccount = selectChimeAccount(accounts);
   const accountPayload = {
     institution: 'Chime',
     account_name: chimeAccount?.name ?? 'Spending',
@@ -172,10 +172,8 @@ async function handleRefresh(supabase: SupabaseClient): Promise<Response> {
     return json({ error: 'Chime not connected via Plaid' }, 400);
   }
 
-  const balanceRes = await plaidFetch('/accounts/balance/get', {
-    access_token: chime.plaid_access_token,
-  });
-  const plaidAccount = selectChimeAccount(balanceRes.accounts);
+  const accounts = await fetchAccountBalances(chime.plaid_access_token);
+  const plaidAccount = selectChimeAccount(accounts);
   const balance = plaidAccount?.balances?.current ?? chime.last_balance;
 
   const { data: updated, error } = await supabase
@@ -187,6 +185,24 @@ async function handleRefresh(supabase: SupabaseClient): Promise<Response> {
 
   if (error) throw error;
   return json({ account: updated });
+}
+
+async function fetchAccountBalances(accessToken: string): Promise<PlaidAccount[]> {
+  try {
+    const res = await plaidFetch('/accounts/balance/get', { access_token: accessToken });
+    return res.accounts ?? [];
+  } catch (err) {
+    // Production Items linked via Transactions may not have Balance API access;
+    // /accounts/get returns cached balances included with the Transactions product.
+    if (
+      err instanceof PlaidError &&
+      (err.code === 'INVALID_PRODUCT' || err.message.includes('not authorized to access'))
+    ) {
+      const res = await plaidFetch('/accounts/get', { access_token: accessToken });
+      return res.accounts ?? [];
+    }
+    throw err;
+  }
 }
 
 function selectChimeAccount(accounts: PlaidAccount[] | undefined): PlaidAccount | undefined {
