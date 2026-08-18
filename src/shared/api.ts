@@ -1402,6 +1402,31 @@ export const api = {
     }));
   },
 
+  async getMotherHubTransactions(): Promise<Transaction[]> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await db()
+        .from('transactions')
+        .select('*, account:financial_accounts(*)')
+        .order('date', { ascending: false });
+      if (error) throw error;
+      return (data as Transaction[]).filter(
+        (t) => t.account?.display_on_mother_hub && !isHiddenTransaction(t)
+      );
+    }
+    const transactions = getLocal('transactions');
+    const accounts = getLocal('financial_accounts');
+    const hubAccountIds = new Set(
+      accounts.filter((a) => a.display_on_mother_hub).map((a) => a.id)
+    );
+    return transactions
+      .filter((t) => hubAccountIds.has(t.account_id) && !isHiddenTransaction(t))
+      .map((t) => ({
+        ...t,
+        account: accounts.find((a) => a.id === t.account_id),
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  },
+
   async importTransactions(rows: Omit<Transaction, 'id' | 'created_at'>[]): Promise<number> {
     const withIds = rows.map((r) => ({
       ...r,

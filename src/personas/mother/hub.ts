@@ -15,7 +15,7 @@ import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm } from './add-event';
 import { ensureMotherHubRealtime, teardownMotherHubRealtime } from '../../shared/realtime';
 import { getAreaAssigneeIds } from '../../shared/responsibilityAssignments';
-import type { CalendarEvent } from '../../shared/types';
+import type { CalendarEvent, Transaction } from '../../shared/types';
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let idleCleanup: (() => void) | null = null;
@@ -51,7 +51,7 @@ export async function renderMotherHub(): Promise<void> {
   layout.append(skeleton);
   app.replaceChildren(layout);
 
-  const [settings, events, reminders, accounts, helpTasks, responsibilityAreas, profiles, responsibilityAssignments] =
+  const [settings, events, reminders, accounts, helpTasks, responsibilityAreas, profiles, responsibilityAssignments, hubTransactions] =
     await Promise.all([
       api.getSettings(),
       api.getCalendarEvents(nowIso),
@@ -61,11 +61,15 @@ export async function renderMotherHub(): Promise<void> {
       api.getResponsibilityAreas(),
       api.getProfiles(),
       api.getResponsibilityAssignments(),
+      api.getMotherHubTransactions(),
     ]);
 
   const chimeAccount = accounts.find(
     (a: import('../../shared/types').FinancialAccount) => a.institution.toLowerCase() === 'chime' && a.display_on_mother_hub
   );
+  const chimeTransactions = chimeAccount
+    ? hubTransactions.filter((tx) => tx.account_id === chimeAccount.id)
+    : hubTransactions;
 
   const activeReminders = reminders.filter((r: import('../../shared/types').Reminder) => r.active && r.show_on_mother_hub);
   const today = new Date();
@@ -106,29 +110,32 @@ export async function renderMotherHub(): Promise<void> {
 
   const content = el('div', { className: 'mother-content' });
 
-  const balanceTile = el('section', { className: 'mother-tile mother-tile--balance mother-q-tl', 'aria-label': 'Chime balance' },
-    createTileHeader('wallet', 'Chime Balance'),
+  const balanceTile = el('section', { className: 'mother-tile mother-tile--balance mother-q-tl', 'aria-label': 'Chime balance 4272' },
+    createTileHeader('wallet', 'Chime Balance 4272'),
     el('div', { className: 'mother-tile-body' },
       el('div', { className: 'mother-balance-layout' },
-        el('div', { className: 'mother-balance-main' },
-          el('p', { className: 'mother-balance' },
-            chimeAccount?.last_balance != null ? formatCurrency(chimeAccount.last_balance) : '—'
+        el('div', { className: 'mother-balance-left' },
+          el('div', { className: 'mother-balance-hero' },
+            el('p', { className: 'mother-balance' },
+              chimeAccount?.last_balance != null ? formatCurrency(chimeAccount.last_balance) : '—'
+            ),
+            el('p', { className: 'mother-balance-meta' },
+              chimeAccount?.last_synced
+                ? chimeAccount.plaid_item_id
+                  ? `Updated ${formatDate(chimeAccount.last_synced)}`
+                  : `Updated ${formatDate(chimeAccount.last_synced)} · manual`
+                : 'Not synced'
+            )
           ),
-          el('p', { className: 'mother-balance-meta' },
-            chimeAccount?.last_synced
-              ? chimeAccount.plaid_item_id
-                ? `Updated ${formatDate(chimeAccount.last_synced)}`
-                : `Updated ${formatDate(chimeAccount.last_synced)} · manual`
-              : 'Not synced'
+          el('div', { className: 'mother-card-images' },
+            createCardSlot('front', 'Front of card')
           )
         ),
-        el('div', { className: 'mother-card-images' },
-          createCardSlot('front', 'Front of card'),
-          createCardSlot('back', 'Back of card')
-        )
+        renderMotherBalanceTransactions(chimeTransactions)
       )
     )
   );
+  attachMotherBalanceTransactionsModal(balanceTile, chimeTransactions);
 
   const eventsBody = el('div', { className: 'mother-tile-body' });
   const eventsTile = el('section', { className: 'mother-tile mother-tile--events mother-q-ml', 'aria-label': 'Upcoming events' },
@@ -644,6 +651,101 @@ function getInitials(name: string): string {
 function resetIdleTimer(): void {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = setTimeout(() => renderMotherHub(), IDLE_TIMEOUT_MS);
+}
+
+function formatTransactionDate(dateStr: string): string {
+  const date = new Date(`${dateStr}T12:00:00`);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function renderMotherBalanceTransactions(transactions: Transaction[]): HTMLElement {
+  const recent = transactions.slice(0, 10);
+  const panel = el('div', {
+    className: 'mother-balance-transactions',
+    role: 'button',
+    tabindex: '0',
+    'aria-label': 'Open all transactions',
+  },
+    el('p', { className: 'mother-balance-tx-heading' }, 'Recent Transactions')
+  );
+
+  if (recent.length === 0) {
+    panel.append(el('p', { className: 'mother-empty-hint' }, 'No transactions yet.'));
+    return panel;
+  }
+
+  const list = el('div', { className: 'mother-balance-tx-list card-table' },
+    el('div', { className: 'card-table-header' },
+      el('div', { className: 'card-table-row card-table-row--mother-tx' },
+        el('span', {}, 'Date'),
+        el('span', {}, 'Description'),
+        el('span', {}, 'Amount')
+      )
+    ),
+    el('div', { className: 'card-table-body mother-balance-tx-body' })
+  );
+  const body = list.querySelector('.mother-balance-tx-body')!;
+  for (const tx of recent) {
+    body.append(renderMotherTransactionRow(tx));
+  }
+  panel.append(list);
+  return panel;
+}
+
+function renderMotherTransactionRow(tx: Transaction): HTMLElement {
+  return el('div', { className: 'card-table-row card-table-row--mother-tx' },
+    el('span', { className: 'mother-balance-tx-date' }, formatTransactionDate(tx.date)),
+    el('span', { className: 'mother-balance-tx-desc' }, tx.description),
+    el('span', {
+      className: 'mother-balance-tx-amount' + (tx.amount < 0 ? ' mother-balance-tx-amount--debit' : ' mother-balance-tx-amount--credit'),
+    }, formatCurrency(tx.amount))
+  );
+}
+
+function attachMotherBalanceTransactionsModal(balanceTile: HTMLElement, transactions: Transaction[]): void {
+  const panel = balanceTile.querySelector('.mother-balance-transactions') as HTMLElement | null;
+  if (!panel) return;
+
+  const openModal = () => showAllChimeTransactionsModal(transactions);
+  panel.addEventListener('click', openModal);
+  panel.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openModal();
+    }
+  });
+}
+
+function showAllChimeTransactionsModal(transactions: Transaction[]): void {
+  const body = el('div', { className: 'mother-tx-modal modal-body' });
+  const subtitle = el(
+    'p',
+    { className: 'app-calendar-subtitle' },
+    `${transactions.length} ${transactions.length === 1 ? 'transaction' : 'transactions'}`
+  );
+
+  if (transactions.length === 0) {
+    body.append(subtitle, el('p', { className: 'mother-empty-hint' }, 'No transactions yet.'));
+  } else {
+    const table = el('div', { className: 'mother-tx-modal-list card-table' },
+      el('div', { className: 'card-table-header' },
+        el('div', { className: 'card-table-row card-table-row--mother-tx' },
+          el('span', {}, 'Date'),
+          el('span', {}, 'Description'),
+          el('span', {}, 'Amount')
+        )
+      ),
+      el('div', { className: 'card-table-body' })
+    );
+    const tableBody = table.querySelector('.card-table-body')!;
+    for (const tx of transactions) {
+      tableBody.append(renderMotherTransactionRow(tx));
+    }
+    body.append(subtitle, table);
+  }
+
+  showModal('All Transactions', body);
+  body.closest('.modal')?.classList.add('mother-tx-modal-shell');
 }
 
 function showAllEventsCalendarModal(events: CalendarEvent[]): void {
