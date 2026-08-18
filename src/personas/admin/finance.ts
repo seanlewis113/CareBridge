@@ -67,8 +67,8 @@ export async function renderAdminFinance(): Promise<void> {
         style: 'font-size:0.9rem;color:var(--color-text-muted);margin:0 0 1rem',
       },
         chimeAccount?.last_synced
-          ? `Chime is connected. Balance refreshes automatically every 6 hours. Last synced ${formatDate(chimeAccount.last_synced)}.`
-          : 'Chime is connected via Plaid. Balance will sync on the next refresh.'
+          ? `Chime is connected. Balance and transactions refresh automatically every 6 hours. Last synced ${formatDate(chimeAccount.last_synced)}.`
+          : 'Chime is connected via Plaid. Balance and transactions will sync on the next refresh.'
       )
     );
   }
@@ -112,7 +112,9 @@ export async function renderAdminFinance(): Promise<void> {
   content.append(el('h3', { style: 'margin-top:1.5rem' }, 'Recent Transactions'));
   const txList = el('div', { className: 'card' });
   if (transactions.length === 0) {
-    txList.append(el('p', { className: 'empty-state' }, 'No transactions yet. Import an Excel or CSV export from your bank.'));
+    txList.append(el('p', { className: 'empty-state' },
+      'No transactions yet. Connect Chime via Plaid and refresh, or import an Excel or CSV export from your bank.'
+    ));
   } else {
     const table = el('div', { className: 'card-table' },
       el('div', { className: 'card-table-header' },
@@ -165,8 +167,15 @@ export async function renderAdminFinance(): Promise<void> {
     const btn = document.getElementById('refresh-chime') as HTMLButtonElement;
     btn.disabled = true;
     try {
-      await api.refreshChimeBalance();
-      showToast('Chime balance updated');
+      const { transactionsSynced } = await api.refreshChimeBalance();
+      const txTotal = transactionsSynced
+        ? transactionsSynced.added + transactionsSynced.modified + transactionsSynced.removed
+        : 0;
+      showToast(
+        txTotal > 0
+          ? `Chime updated (${transactionsSynced!.added} new transactions)`
+          : 'Chime balance updated'
+      );
       await renderAdminFinance();
     } catch (err) {
       if (err instanceof PlaidApiError && err.needsRelink) {
@@ -288,7 +297,7 @@ async function startPlaidConnect(onSuccess: () => void | Promise<void>): Promise
       onSuccess: async (publicToken) => {
         try {
           await api.exchangePlaidToken(publicToken);
-          showToast('Chime connected');
+          showToast('Chime connected — syncing transactions');
           await onSuccess();
         } catch (err) {
           alert(err instanceof Error ? err.message : 'Could not connect Chime account.');

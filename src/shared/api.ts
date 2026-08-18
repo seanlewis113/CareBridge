@@ -1285,19 +1285,29 @@ export const api = {
     return updated;
   },
 
-  async refreshChimeBalance(): Promise<FinancialAccount | null> {
+  async refreshChimeBalance(): Promise<{
+    account: FinancialAccount | null;
+    transactionsSynced?: { added: number; modified: number; removed: number };
+  }> {
     if (isSupabaseConfigured) {
       const data = await invokePlaidBalance({ action: 'refresh' });
       await this.logActivity('financial.refresh_balance');
-      return (data?.account as FinancialAccount | undefined) ?? null;
+      const transactionsSynced = data?.transactions_synced as
+        | { added: number; modified: number; removed: number }
+        | undefined;
+      return {
+        account: (data?.account as FinancialAccount | undefined) ?? null,
+        transactionsSynced,
+      };
     }
     const accounts = getLocal('financial_accounts');
     const chime = accounts.find((a) => a.institution.toLowerCase() === 'chime');
-    if (!chime) return null;
-    return this.updateFinancialAccount(chime.id, {
+    if (!chime) return { account: null };
+    const account = await this.updateFinancialAccount(chime.id, {
       last_balance: chime.last_balance,
       last_synced: new Date().toISOString(),
     });
+    return { account };
   },
 
   async getPlaidLinkToken(): Promise<string> {

@@ -137,11 +137,13 @@ async function handleExchange(
     .limit(1)
     .maybeSingle();
 
+  const resetCursor = { plaid_transactions_cursor: null };
+
   let account;
   if (existing?.id) {
     const { data, error } = await supabase
       .from('financial_accounts')
-      .update(accountPayload)
+      .update({ ...accountPayload, ...resetCursor })
       .eq('id', existing.id)
       .select()
       .single();
@@ -157,34 +159,62 @@ async function handleExchange(
     account = data;
   }
 
-  return json({ account });
+  const txSync = await syncTransactions(
+    supabase,
+    account.id,
+    access_token,
+    null,
+    chimeAccount?.account_id
+  );
+
+  const { data: syncedAccount, error: syncError } = await supabase
+    .from('financial_accounts')
+    .update({ plaid_transactions_cursor: txSync.cursor })
+    .eq('id', account.id)
+    .select()
+    .single();
+  if (syncError) throw syncError;
+
+  return json({ account: syncedAccount, transactions_synced: txSync.counts });
 }
 
 async function handleRefresh(supabase: SupabaseClient): Promise<Response> {
-  const { data: accounts } = await supabase
+  const { data: storedAccounts } = await supabase
     .from('financial_accounts')
     .select('*')
     .ilike('institution', 'chime')
     .limit(1);
 
-  const chime = accounts?.[0];
+  const chime = storedAccounts?.[0];
   if (!chime?.plaid_access_token) {
     return json({ error: 'Chime not connected via Plaid' }, 400);
   }
 
-  const accounts = await fetchAccountBalances(chime.plaid_access_token);
-  const plaidAccount = selectChimeAccount(accounts);
+  const plaidAccounts = await fetchAccountBalances(chime.plaid_access_token);
+  const plaidAccount = selectChimeAccount(plaidAccounts);
   const balance = plaidAccount?.balances?.current ?? chime.last_balance;
+
+  const txSync = await syncTransactions(
+    supabase,
+    chime.id,
+    chime.plaid_access_token,
+    chime.plaid_transactions_cursor ?? null,
+    plaidAccount?.account_id
+  );
 
   const { data: updated, error } = await supabase
     .from('financial_accounts')
-    .update({ last_balance: balance, last_synced: new Date().toISOString() })
+    .update({
+      last_balance: balance,
+      last_synced: new Date().toISOString(),
+      plaid_transactions_cursor: txSync.cursor,
+    })
     .eq('id', chime.id)
     .select()
     .single();
 
   if (error) throw error;
-  return json({ account: updated });
+  return json({ account: updated, transactions_synced: txSync.counts });
 }
 
 async function fetchAccountBalances(accessToken: string): Promise<PlaidAccount[]> {
@@ -210,6 +240,128 @@ function selectChimeAccount(accounts: PlaidAccount[] | undefined): PlaidAccount 
   return accounts.find((a) =>
     a.name?.toLowerCase().includes('chime') || a.subtype === 'checking'
   ) ?? accounts[0];
+}
+
+interface TransactionSyncCounts {
+  added: number;
+  modified: number;
+  removed: number;
+}
+
+async function syncTransactions(
+  supabase: SupabaseClient,
+  accountId: string,
+  accessToken: string,
+  cursor: string | null,
+  plaidAccountId: string | undefined
+): Promise<{ cursor: string; counts: TransactionSyncCounts }> {
+  const counts: TransactionSyncCounts = { added: 0, modified: 0, removed: 0 };
+  let nextCursor = cursor ?? '';
+  let hasMore = true;
+
+  const pendingAdded: PlaidTransaction[] = [];
+  const pendingModified: PlaidTransaction[] = [];
+  const pendingRemoved: string[] = [];
+
+  while (hasMore) {
+    const body: Record<string, unknown> = { access_token: accessToken };
+    if (nextCursor) body.cursor = nextCursor;
+
+    const res = await plaidFetch('/transactions/sync', body);
+    hasMore = res.has_more ?? false;
+    nextCursor = res.next_cursor ?? nextCursor;
+
+    for (const tx of (res.added ?? []) as PlaidTransaction[]) {
+      if (plaidAccountId && tx.account_id !== plaidAccountId) continue;
+      pendingAdded.push(tx);
+    }
+    for (const tx of (res.modified ?? []) as PlaidTransaction[]) {
+      if (plaidAccountId && tx.account_id !== plaidAccountId) continue;
+      pendingModified.push(tx);
+    }
+    for (const id of (res.removed ?? []) as { transaction_id?: string }[]) {
+      if (id.transaction_id) pendingRemoved.push(id.transaction_id);
+    }
+  }
+
+  if (pendingAdded.length > 0) {
+    const { data: existing } = await supabase
+      .from('transactions')
+      .select('import_source')
+      .eq('account_id', accountId)
+      .like('import_source', 'plaid:%');
+
+    const known = new Set((existing ?? []).map((row) => row.import_source));
+    const toInsert = pendingAdded
+      .filter((tx) => !known.has(plaidImportSource(tx.transaction_id)))
+      .map((tx) => mapPlaidTransaction(tx, accountId));
+
+    if (toInsert.length > 0) {
+      const { error } = await supabase.from('transactions').insert(toInsert);
+      if (error) throw error;
+      counts.added = toInsert.length;
+    }
+  }
+
+  for (const tx of pendingModified) {
+    const { error } = await supabase
+      .from('transactions')
+      .update(mapPlaidTransaction(tx, accountId))
+      .eq('account_id', accountId)
+      .eq('import_source', plaidImportSource(tx.transaction_id));
+    if (error) throw error;
+    counts.modified += 1;
+  }
+
+  if (pendingRemoved.length > 0) {
+    const sources = pendingRemoved.map(plaidImportSource);
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('account_id', accountId)
+      .in('import_source', sources);
+    if (error) throw error;
+    counts.removed = pendingRemoved.length;
+  }
+
+  return { cursor: nextCursor, counts };
+}
+
+function plaidImportSource(transactionId: string): string {
+  return `plaid:${transactionId}`;
+}
+
+function mapPlaidTransaction(
+  tx: PlaidTransaction,
+  accountId: string
+): {
+  account_id: string;
+  date: string;
+  description: string;
+  amount: number;
+  category: string | null;
+  import_source: string;
+} {
+  return {
+    account_id: accountId,
+    date: tx.date ?? tx.authorized_date ?? new Date().toISOString().slice(0, 10),
+    description: tx.merchant_name ?? tx.name ?? 'Transaction',
+    amount: -(tx.amount ?? 0),
+    category: formatPlaidCategory(tx),
+    import_source: plaidImportSource(tx.transaction_id),
+  };
+}
+
+function formatPlaidCategory(tx: PlaidTransaction): string | null {
+  const primary = tx.personal_finance_category?.primary;
+  if (primary) {
+    return primary
+      .replace(/_/g, ' ')
+      .toLowerCase()
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  if (tx.category?.length) return tx.category.join(', ');
+  return null;
 }
 
 async function plaidFetch(path: string, body: Record<string, unknown>) {
@@ -244,7 +396,20 @@ function json(data: unknown, status = 200) {
 }
 
 interface PlaidAccount {
+  account_id?: string;
   name?: string;
   subtype?: string;
   balances?: { current?: number };
+}
+
+interface PlaidTransaction {
+  transaction_id: string;
+  account_id?: string;
+  amount?: number;
+  date?: string;
+  authorized_date?: string;
+  name?: string;
+  merchant_name?: string;
+  category?: string[];
+  personal_finance_category?: { primary?: string };
 }

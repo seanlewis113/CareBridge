@@ -205,6 +205,7 @@ export interface Database {
           account_name: string;
           plaid_item_id: string | null;
           plaid_access_token: string | null;
+          plaid_transactions_cursor: string | null;
           last_balance: number | null;
           last_synced: string | null;
           display_on_mother_hub: boolean;
@@ -216,6 +217,7 @@ export interface Database {
           account_name: string;
           plaid_item_id?: string | null;
           plaid_access_token?: string | null;
+          plaid_transactions_cursor?: string | null;
           last_balance?: number | null;
           last_synced?: string | null;
           display_on_mother_hub?: boolean;
