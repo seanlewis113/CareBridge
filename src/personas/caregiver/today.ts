@@ -2,12 +2,14 @@ import { api } from '../../shared/api';
 import { getSession } from '../../shared/auth';
 import { renderCaregiverShell } from '../shared/shell';
 import { navigate } from '../../shared/router';
-import { el, formatTime } from '../../shared/utils';
+import { el } from '../../shared/utils';
 import { icon } from '../../shared/icons';
 import { ensureTaskRealtime } from '../../shared/realtime';
 import { taskHasAssignees } from '../../shared/taskAssignments';
 import { renderCaregiverDashTaskPanel, sortCaregiverTasks } from './taskTable';
 import { renderRecurringChecksSection } from './recurringChecks';
+import { renderDashboardScheduleEventRow } from '../../shared/calendarViews';
+import { formatCalendarLastSynced, getLatestCalendarSyncAt } from '../../shared/calendarRecurrence';
 import type { CalendarEvent } from '../../shared/types';
 
 export async function renderCaregiverToday(): Promise<void> {
@@ -125,6 +127,11 @@ function renderSchedulePanel(events: CalendarEvent[]): HTMLElement {
   viewAll.addEventListener('click', () => navigate('/caregiver/calendar'));
   head.append(viewAll);
   panel.append(head);
+  panel.append(
+    el('p', { className: 'calendar-last-synced calendar-last-synced--panel' },
+      formatCalendarLastSynced(getLatestCalendarSyncAt(events))
+    )
+  );
 
   if (events.length === 0) {
     panel.append(el('p', { className: 'caregiver-dash-empty' }, 'No events scheduled today.'));
@@ -133,12 +140,7 @@ function renderSchedulePanel(events: CalendarEvent[]): HTMLElement {
 
   const list = el('div', { className: 'caregiver-dash-list' });
   for (const event of events) {
-    list.append(
-      el('div', { className: 'caregiver-dash-row caregiver-dash-row--schedule' },
-        el('span', { className: 'caregiver-dash-time' }, formatTime(event.start_at)),
-        el('span', { className: 'caregiver-dash-row-title' }, event.title)
-      )
-    );
+    list.append(renderDashboardScheduleEventRow(event));
   }
   panel.append(list);
   return panel;

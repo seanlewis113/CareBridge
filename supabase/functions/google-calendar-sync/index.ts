@@ -3,17 +3,18 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') ?? '';
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '';
+const CRON_SECRET = Deno.env.get('CRON_SECRET') ?? '';
 const SYNC_DAYS = 90;
 const MS_PER_DAY = 86400000;
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
@@ -55,6 +56,12 @@ serve(async (req) => {
     const accessToken = await getAccessToken(settings.google_refresh_token);
 
     if (action === 'pull') {
+      const cronSecret = req.headers.get('x-cron-secret');
+      const isCron = !!CRON_SECRET && cronSecret === CRON_SECRET;
+      if (CRON_SECRET && !isCron && !req.headers.get('authorization')) {
+        return json({ error: 'Unauthorized' }, 401);
+      }
+
       const calendarId = settings.google_calendar_id ?? 'primary';
       const now = new Date();
       const syncEnd = new Date(now.getTime() + SYNC_DAYS * MS_PER_DAY);
@@ -100,15 +107,19 @@ serve(async (req) => {
         const existing = existingByGoogleId.get(ev.google_event_id);
         if (!existing) {
           added.push(toChangeItem(ev));
-        } else if (!eventFieldsEqual(existing, ev)) {
-          updated.push({
-            ...toChangeItem(ev),
-            previous: {
-              title: existing.title,
-              start_at: existing.start_at,
-              end_at: existing.end_at,
-            },
-          });
+        } else {
+          const changedFields = getChangedFields(existing, ev);
+          if (changedFields.length > 0) {
+            updated.push({
+              ...toChangeItem(ev),
+              previous: {
+                title: existing.title,
+                start_at: existing.start_at,
+                end_at: existing.end_at,
+              },
+              changed_fields: changedFields,
+            });
+          }
         }
         await supabase.from('calendar_events').upsert(ev, { onConflict: 'google_event_id' });
       }
@@ -237,17 +248,47 @@ interface SyncChangeItem {
 
 interface SyncUpdatedItem extends SyncChangeItem {
   previous?: SyncChangeItem;
+  changed_fields?: Array<'title' | 'start_at' | 'end_at' | 'description'>;
 }
 
 function toChangeItem(row: SyncEventRow): SyncChangeItem {
   return { title: row.title, start_at: row.start_at, end_at: row.end_at };
 }
 
-function eventFieldsEqual(a: SyncEventRow, b: SyncEventRow): boolean {
-  return (
-    a.title === b.title &&
-    a.start_at === b.start_at &&
-    a.end_at === b.end_at &&
-    (a.description ?? null) === (b.description ?? null)
-  );
+function normalizeDescription(value: string | null | undefined): string | null {
+  const trimmed = (value ?? '').trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Compare calendar times by instant, not raw string (Google vs Postgres formats differ). */
+function calendarTimesEqual(a: string, b: string): boolean {
+  return calendarTimeKey(a) === calendarTimeKey(b);
+}
+
+function calendarTimeKey(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return `date:${value}`;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return `raw:${value}`;
+  const iso = parsed.toISOString();
+  // Date-only Google events are often stored in Postgres as UTC midnight.
+  if (iso.endsWith('T00:00:00.000Z')) {
+    return `date:${iso.slice(0, 10)}`;
+  }
+  return `ms:${parsed.getTime()}`;
+}
+
+function getChangedFields(
+  existing: SyncEventRow,
+  incoming: SyncEventRow
+): Array<'title' | 'start_at' | 'end_at' | 'description'> {
+  const changed: Array<'title' | 'start_at' | 'end_at' | 'description'> = [];
+  if (existing.title !== incoming.title) changed.push('title');
+  if (!calendarTimesEqual(existing.start_at, incoming.start_at)) changed.push('start_at');
+  if (!calendarTimesEqual(existing.end_at, incoming.end_at)) changed.push('end_at');
+  if (normalizeDescription(existing.description) !== normalizeDescription(incoming.description)) {
+    changed.push('description');
+  }
+  return changed;
 }

@@ -1,5 +1,5 @@
 import type { CalendarEvent } from './types';
-import { formatTime } from './utils';
+import { formatDate, formatRelativeTime, formatTime } from './utils';
 
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
 
@@ -23,6 +23,30 @@ export function isUntimedEvent(event: Pick<CalendarEvent, 'start_at'>): boolean 
 
 export function formatEventTime(event: Pick<CalendarEvent, 'start_at'>): string {
   return isUntimedEvent(event) ? 'none' : formatTime(event.start_at);
+}
+
+export function getLatestCalendarSyncAt(events: Iterable<Pick<CalendarEvent, 'synced_at'>>): string | null {
+  let latest: string | null = null;
+  for (const event of events) {
+    if (!event.synced_at) continue;
+    if (!latest || event.synced_at > latest) latest = event.synced_at;
+  }
+  return latest;
+}
+
+export function formatCalendarLastSynced(syncedAt: string | null): string {
+  if (!syncedAt) return 'Not synced';
+  return `Last synced ${formatDate(syncedAt)} at ${formatTime(syncedAt)}`;
+}
+
+export function formatEventSyncedLabel(event: Pick<CalendarEvent, 'synced_at'>): string | null {
+  if (!event.synced_at) return null;
+  return `Synced ${formatRelativeTime(event.synced_at)}`;
+}
+
+export function formatEventSyncedTitle(event: Pick<CalendarEvent, 'title' | 'synced_at'>): string {
+  const synced = formatEventSyncedLabel(event);
+  return synced ? `${event.title} · ${synced}` : event.title;
 }
 
 export function parseEventInstant(value: string): Date {

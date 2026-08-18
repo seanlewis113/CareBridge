@@ -1,7 +1,13 @@
 import type { CalendarEvent } from './types';
 import { el, formatDate, formatTime } from './utils';
 import { icon, type IconName } from './icons';
-import { getEventDateSpan } from './calendarRecurrence';
+import {
+  formatCalendarLastSynced,
+  formatEventSyncedLabel,
+  formatEventSyncedTitle,
+  getEventDateSpan,
+  getLatestCalendarSyncAt,
+} from './calendarRecurrence';
 
 interface EventSpan {
   startKey: string;
@@ -47,6 +53,15 @@ export interface CalendarGridOptions {
   showToolbar?: boolean;
   scrollable?: boolean;
   onEdit?: (event: CalendarEvent) => void | Promise<void>;
+}
+
+export function renderCalendarLastSyncedMeta(events: CalendarEvent[]): HTMLElement {
+  const syncedAt = getLatestCalendarSyncAt(events);
+  return el(
+    'p',
+    { className: 'calendar-last-synced' },
+    formatCalendarLastSynced(syncedAt)
+  );
 }
 
 export function groupEventsByDay(events: CalendarEvent[]): [string, CalendarEvent[]][] {
@@ -114,10 +129,14 @@ export function renderCalendarGridView(events: CalendarEvent[], options: Calenda
 
   if (showToolbar) {
     const header = el('div', { className: 'app-calendar-toolbar' });
-    const subtitle = el(
-      'p',
-      { className: 'app-calendar-subtitle' },
-      `${events.length} upcoming ${events.length === 1 ? 'event' : 'events'}`
+    const toolbarMeta = el('div', { className: 'app-calendar-toolbar-meta' });
+    toolbarMeta.append(
+      el(
+        'p',
+        { className: 'app-calendar-subtitle' },
+        `${events.length} upcoming ${events.length === 1 ? 'event' : 'events'}`
+      ),
+      renderCalendarLastSyncedMeta(events)
     );
     const todayBtn = el(
       'button',
@@ -125,7 +144,7 @@ export function renderCalendarGridView(events: CalendarEvent[], options: Calenda
       'Today'
     );
     todayBtn.addEventListener('click', () => scrollCalendarToToday(wrap));
-    header.append(subtitle, todayBtn);
+    header.append(toolbarMeta, todayBtn);
     wrap.append(header);
   }
 
@@ -159,12 +178,18 @@ export function renderCalendarListView(events: CalendarEvent[], options: Calenda
   for (const [day, dayEvents] of groupEventsByDay(events)) {
     const group = el('div', { className: 'calendar-day-group' }, el('h3', {}, formatDate(day + 'T12:00:00')));
     for (const event of dayEvents) {
-      const details = el('div', {},
-        el('strong', {}, formatTime(event.start_at)),
-        ' — ',
-        event.title,
-        options.showGoogleBadge && event.google_event_id
-          ? el('span', { style: 'font-size:0.8rem;color:var(--color-text-muted);margin-left:0.5rem' }, '(Google)')
+      const syncedLabel = formatEventSyncedLabel(event);
+      const details = el('div', { className: 'calendar-list-item-details' },
+        el('div', { className: 'calendar-list-item-main' },
+          el('strong', {}, formatTime(event.start_at)),
+          ' — ',
+          event.title,
+          options.showGoogleBadge && event.google_event_id
+            ? el('span', { style: 'font-size:0.8rem;color:var(--color-text-muted);margin-left:0.5rem' }, '(Google)')
+            : null
+        ),
+        syncedLabel
+          ? el('span', { className: 'calendar-event-synced' }, syncedLabel)
           : null
       );
 
@@ -203,6 +228,18 @@ export function renderCalendarListView(events: CalendarEvent[], options: Calenda
   }
 
   return wrap;
+}
+
+export function renderDashboardScheduleEventRow(event: CalendarEvent): HTMLElement {
+  const syncedLabel = formatEventSyncedLabel(event);
+  const titleCell = el('span', { className: 'caregiver-dash-row-title' }, event.title);
+  if (syncedLabel) {
+    titleCell.append(el('span', { className: 'calendar-event-synced' }, syncedLabel));
+  }
+  return el('div', { className: 'caregiver-dash-row caregiver-dash-row--schedule' },
+    el('span', { className: 'caregiver-dash-time' }, formatTime(event.start_at)),
+    titleCell
+  );
 }
 
 function buildMonthStarts(now: Date, events: CalendarEvent[]): Date[] {
@@ -358,15 +395,20 @@ function getEventToneClass(seed: string | number): string {
 
 function renderGridDayEvent(event: CalendarEvent, options: CalendarGridOptions): HTMLElement {
   const toneClass = getEventToneClass(event.id);
+  const eventTitle = formatEventSyncedTitle(event);
   const eventNode = options.onEdit
     ? el('button', {
       type: 'button',
       className: `app-calendar-day-event app-calendar-day-event--clickable ${toneClass}`,
-      'aria-label': `Edit ${event.title}`,
+      'aria-label': `Edit ${eventTitle}`,
+      title: eventTitle,
     },
       el('span', { className: 'app-calendar-day-event-title' }, event.title)
     )
-    : el('div', { className: `app-calendar-day-event ${toneClass}` },
+    : el('div', {
+      className: `app-calendar-day-event ${toneClass}`,
+      title: eventTitle,
+    },
       el('span', { className: 'app-calendar-day-event-title' }, event.title)
     );
 
@@ -386,12 +428,14 @@ function renderWeekSpanEvent(segment: WeekSegment, options: CalendarGridOptions)
     options.onEdit ? 'app-calendar-span-event--clickable' : '',
   ].filter(Boolean).join(' ');
 
+  const eventTitle = formatEventSyncedTitle(segment.event);
   const eventNode = options.onEdit
     ? el('button', {
       type: 'button',
       className: classes,
       style: `grid-column:${segment.startCol + 1} / ${segment.endCol + 2}; grid-row:${segment.lane + 1};`,
-      'aria-label': `Edit ${segment.event.title}`,
+      'aria-label': `Edit ${eventTitle}`,
+      title: eventTitle,
     },
       segment.showTitle
         ? el('span', { className: 'app-calendar-span-event-title' }, segment.event.title)
@@ -400,6 +444,7 @@ function renderWeekSpanEvent(segment: WeekSegment, options: CalendarGridOptions)
     : el('div', {
       className: classes,
       style: `grid-column:${segment.startCol + 1} / ${segment.endCol + 2}; grid-row:${segment.lane + 1};`,
+      title: eventTitle,
     },
       segment.showTitle
         ? el('span', { className: 'app-calendar-span-event-title' }, segment.event.title)

@@ -7,9 +7,10 @@ import {
   renderCalendarGridView,
   renderCalendarListView,
   renderCalendarViewToggle,
+  renderCalendarLastSyncedMeta,
   type CalendarViewMode,
 } from '../../shared/calendarViews';
-import { formatEventTime } from '../../shared/calendarRecurrence';
+import { formatEventTime, formatEventSyncedLabel, formatCalendarLastSynced, getLatestCalendarSyncAt } from '../../shared/calendarRecurrence';
 import { el, greeting, formatDate, formatCurrency, showModal, timeOfDayClass, showToast } from '../../shared/utils';
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm } from './add-event';
@@ -146,6 +147,7 @@ export async function renderMotherHub(): Promise<void> {
   const eventsBody = el('div', { className: 'mother-tile-body' });
   const eventsTile = el('section', { className: 'mother-tile mother-tile--events mother-q-ml', 'aria-label': 'Upcoming events' },
     createTileHeader('calendar', 'Upcoming Events'),
+    el('p', { className: 'mother-calendar-sync-meta' }, formatCalendarLastSynced(getLatestCalendarSyncAt(events))),
     eventsBody
   );
 
@@ -168,11 +170,16 @@ export async function renderMotherHub(): Promise<void> {
     for (const [day, dayEvents] of grouped) {
       const dayLabel = day === todayStr ? 'Today' : formatDate(day + 'T12:00:00');
       for (const event of dayEvents) {
+        const syncedLabel = formatEventSyncedLabel(event);
+        const titleCell = el('span', { className: 'mother-event-title' }, event.title);
+        if (syncedLabel) {
+          titleCell.append(el('span', { className: 'calendar-event-synced' }, syncedLabel));
+        }
         body.append(
           el('div', { className: 'card-table-row card-table-row--events' },
             el('span', { className: 'mother-event-day-col' }, dayLabel),
             el('span', { className: 'mother-time-pill' }, formatEventTime(event)),
-            el('span', { className: 'mother-event-title' }, event.title)
+            titleCell
           )
         );
       }
@@ -770,10 +777,14 @@ function showAllEventsCalendarModal(events: CalendarEvent[]): void {
   let viewMode: CalendarViewMode = getCalendarViewMode();
   const body = el('div', { className: 'mother-calendar-modal modal-body' });
   const header = el('div', { className: 'mother-calendar-modal-header' });
-  const subtitle = el(
-    'p',
-    { className: 'app-calendar-subtitle' },
-    `${events.length} upcoming ${events.length === 1 ? 'event' : 'events'}`
+  const headerMeta = el('div', { className: 'mother-calendar-modal-header-meta' });
+  headerMeta.append(
+    el(
+      'p',
+      { className: 'app-calendar-subtitle' },
+      `${events.length} upcoming ${events.length === 1 ? 'event' : 'events'}`
+    ),
+    renderCalendarLastSyncedMeta(events)
   );
   const headerActions = el('div', { className: 'mother-calendar-modal-header-actions' });
   const viewHost = el('div', {});
@@ -796,7 +807,7 @@ function showAllEventsCalendarModal(events: CalendarEvent[]): void {
     );
   };
 
-  header.append(subtitle, headerActions);
+  header.append(headerMeta, headerActions);
   headerActions.append(viewHost);
   body.append(header, contentHost);
   renderView();

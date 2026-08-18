@@ -446,3 +446,40 @@
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+
+.app-calendar-toolbar-meta,
+.mother-calendar-modal-header-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.calendar-last-synced {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.calendar-last-synced--panel {
+  margin: -0.35rem 0 0.75rem;
+  padding: 0 1rem;
+}
+
+.calendar-event-synced {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.calendar-list-item-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.calendar-list-item-main {
+  min-width: 0;
+}

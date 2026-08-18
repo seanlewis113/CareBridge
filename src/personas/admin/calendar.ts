@@ -5,6 +5,7 @@ import {
   renderCalendarListView,
   renderCalendarViewToggle,
 } from '../../shared/calendarViews';
+import { formatCalendarLastSynced, getLatestCalendarSyncAt } from '../../shared/calendarRecurrence';
 import { renderAdminShell } from '../shared/shell';
 import { el, confirmDialog, formatDateTime, showModal } from '../../shared/utils';
 import { openEventEditorModal } from '../mother/add-event';
@@ -36,6 +37,8 @@ export async function renderAdminCalendar(): Promise<void> {
   const renderEvents = async () => {
     const events = await api.getCalendarEvents(new Date().toISOString());
     eventsContainer.replaceChildren();
+    statusEl.textContent = formatCalendarLastSynced(getLatestCalendarSyncAt(events));
+    statusEl.style.color = 'var(--color-text-muted)';
 
     viewToggleHost.replaceChildren(renderCalendarViewToggle(viewMode, (mode) => {
       viewMode = mode;
@@ -78,10 +81,11 @@ export async function renderAdminCalendar(): Promise<void> {
     try {
       const { events, changes } = await api.syncCalendarFromGoogle();
       const changeCount = countSyncChanges(changes);
+      const lastSynced = formatCalendarLastSynced(getLatestCalendarSyncAt(events));
       if (changeCount === 0) {
-        statusEl.textContent = `Google Calendar is up to date (${events.length} upcoming events).`;
+        statusEl.textContent = `Google Calendar is up to date (${events.length} upcoming events). ${lastSynced}.`;
       } else {
-        statusEl.textContent = `Synced ${changeCount} change${changeCount === 1 ? '' : 's'} from Google Calendar.`;
+        statusEl.textContent = `Synced ${changeCount} change${changeCount === 1 ? '' : 's'} from Google Calendar. ${lastSynced}.`;
         showCalendarSyncReviewModal(changes);
       }
       await renderEvents();
@@ -106,17 +110,35 @@ function formatEventSchedule(item: CalendarSyncChangeItem): string {
 }
 
 function describeUpdatedChange(item: CalendarSyncUpdatedItem): string {
-  if (!item.previous) return formatEventSchedule(item);
+  const schedule = formatEventSchedule(item);
+  const fields = item.changed_fields ?? [];
+
+  if (fields.length === 1 && fields[0] === 'description') {
+    return `${item.title} · ${schedule} (description updated)`;
+  }
+
+  if (!item.previous) return schedule;
 
   const previousSchedule = formatEventSchedule(item.previous);
-  const nextSchedule = formatEventSchedule(item);
-  if (item.previous.title !== item.title && previousSchedule !== nextSchedule) {
-    return `${item.title} · ${nextSchedule} (was "${item.previous.title}" · ${previousSchedule})`;
+  const titleChanged = fields.includes('title') || item.previous.title !== item.title;
+  const scheduleChanged =
+    fields.includes('start_at') ||
+    fields.includes('end_at') ||
+    previousSchedule !== schedule;
+
+  if (titleChanged && scheduleChanged) {
+    return `${item.title} · ${schedule} (was "${item.previous.title}" · ${previousSchedule})`;
   }
-  if (item.previous.title !== item.title) {
-    return `${item.title} (was "${item.previous.title}") · ${nextSchedule}`;
+  if (titleChanged) {
+    return `${item.title} (was "${item.previous.title}") · ${schedule}`;
   }
-  return `${item.title} · ${nextSchedule} (was ${previousSchedule})`;
+  if (scheduleChanged) {
+    return `${item.title} · ${schedule} (was ${previousSchedule})`;
+  }
+  if (fields.includes('description')) {
+    return `${item.title} · ${schedule} (description updated)`;
+  }
+  return `${item.title} · ${schedule}`;
 }
 
 function renderSyncChangeSection(

@@ -31,6 +31,7 @@ export interface CalendarSyncChangeItem {
 
 export interface CalendarSyncUpdatedItem extends CalendarSyncChangeItem {
   previous?: Pick<CalendarSyncChangeItem, 'title' | 'start_at' | 'end_at'>;
+  changed_fields?: Array<'title' | 'start_at' | 'end_at' | 'description'>;
 }
 
 export interface CalendarSyncChanges {

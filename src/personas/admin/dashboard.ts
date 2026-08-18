@@ -1,6 +1,6 @@
 import { api } from '../../shared/api';
 import { renderAdminShell } from '../shared/shell';
-import { el, formatCurrency, formatDate, formatRelativeTime, formatTime } from '../../shared/utils';
+import { el, formatCurrency, formatDate, formatRelativeTime } from '../../shared/utils';
 import { icon } from '../../shared/icons';
 import { navigate } from '../../shared/router';
 import { ensureTaskRealtime } from '../../shared/realtime';
@@ -8,6 +8,8 @@ import { sortCaregiverTasks } from '../caregiver/taskTable';
 import { renderRecurringChecksSection } from '../caregiver/recurringChecks';
 import { formatAction, formatActor, formatDetails } from './activity';
 import { isRevertible } from '../../shared/revertActivity';
+import { renderDashboardScheduleEventRow } from '../../shared/calendarViews';
+import { formatCalendarLastSynced, getLatestCalendarSyncAt } from '../../shared/calendarRecurrence';
 import type { ActivityLog, CalendarEvent, Task } from '../../shared/types';
 
 export async function renderAdminDashboard(): Promise<void> {
@@ -140,6 +142,11 @@ function renderSchedulePanel(events: CalendarEvent[]): HTMLElement {
   viewAll.addEventListener('click', () => navigate('/admin/calendar'));
   head.append(viewAll);
   panel.append(head);
+  panel.append(
+    el('p', { className: 'calendar-last-synced calendar-last-synced--panel' },
+      formatCalendarLastSynced(getLatestCalendarSyncAt(events))
+    )
+  );
 
   if (events.length === 0) {
     panel.append(el('p', { className: 'caregiver-dash-empty' }, 'No events scheduled today.'));
@@ -148,12 +155,7 @@ function renderSchedulePanel(events: CalendarEvent[]): HTMLElement {
 
   const list = el('div', { className: 'caregiver-dash-list' });
   for (const event of events.slice(0, 5)) {
-    list.append(
-      el('div', { className: 'caregiver-dash-row caregiver-dash-row--schedule' },
-        el('span', { className: 'caregiver-dash-time' }, formatTime(event.start_at)),
-        el('span', { className: 'caregiver-dash-row-title' }, event.title)
-      )
-    );
+    list.append(renderDashboardScheduleEventRow(event));
   }
   panel.append(list);
   return panel;

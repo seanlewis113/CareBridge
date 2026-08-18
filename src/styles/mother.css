@@ -335,6 +335,17 @@ body:has(.mother-app) {
   width: fit-content;
 }
 
+.mother-calendar-sync-meta {
+  margin: -0.15rem 0 clamp(0.35rem, 0.8vh, 0.55rem);
+  font-size: clamp(0.78rem, 1.6vh, 0.9rem);
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.mother-event-title .calendar-event-synced {
+  margin-top: 0.1rem;
+}
+
 .mother-balance-right {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
