@@ -7,6 +7,7 @@ import {
   getSourceEventId,
   isUntimedEvent,
   parseRecurringRule,
+  toLocalTimeInput,
   type EventRecurrenceRule,
 } from '../../shared/calendarRecurrence';
 import { createClockPickerField } from '../../shared/clock-picker';
@@ -31,7 +32,7 @@ export function renderEventForm({ event, occurrence, onSuccess }: EventFormOptio
   const eventSpan = displayEvent ? getEventDateSpan(displayEvent) : null;
   const startDate = eventSpan?.startKey ?? todayISO();
   const endDate = eventSpan?.endKey ?? startDate;
-  const startTime = displayEvent && !isUntimedEvent(displayEvent) ? displayEvent.start_at.slice(11, 16) : '';
+  const startTime = displayEvent && !isUntimedEvent(displayEvent) ? toLocalTimeInput(displayEvent.start_at) : '';
 
   const form = el('form', { className: 'mother-add-form modal-body' });
 

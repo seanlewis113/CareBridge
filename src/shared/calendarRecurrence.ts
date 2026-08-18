@@ -43,6 +43,14 @@ export function toIsoLocalSeconds(date: Date): string {
   return `${y}-${m}-${d}T${hh}:${mm}:${ss}`;
 }
 
+/** HH:MM in the user's local timezone (for time inputs). */
+export function toLocalTimeInput(value: string): string {
+  const date = new Date(value);
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
 export function toLocalDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
