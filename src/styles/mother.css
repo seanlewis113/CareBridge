@@ -159,6 +159,16 @@ body:has(.mother-app) {
   border-top: 4px solid var(--color-success);
 }
 
+.mother-tile--balance .mother-tile-header {
+  margin-bottom: clamp(0.2rem, 0.5vh, 0.35rem);
+}
+
+.mother-tile--balance .mother-tile-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+}
+
 .mother-tile--events {
   background: linear-gradient(145deg, #ffffff 0%, var(--color-primary-light) 55%, #fff8f0 100%);
   border-top: 4px solid var(--color-primary);
@@ -260,7 +270,7 @@ body:has(.mother-app) {
   flex-direction: column;
 }
 
-/* Balance — side-by-side columns; right column fills full height */
+/* Balance — full-height two columns; title lives in left column only */
 .mother-balance-layout {
   display: grid;
   grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
@@ -277,7 +287,7 @@ body:has(.mother-app) {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  gap: clamp(0.35rem, 0.8vh, 0.5rem);
+  gap: clamp(0.25rem, 0.6vh, 0.45rem);
 }
 
 .mother-balance-hero {
@@ -328,9 +338,10 @@ body:has(.mother-app) {
 .mother-balance-right {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  align-content: start;
+  align-content: stretch;
   min-width: 0;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
   gap: clamp(0.25rem, 0.55vh, 0.45rem);
 }

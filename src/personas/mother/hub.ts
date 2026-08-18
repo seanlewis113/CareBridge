@@ -111,10 +111,10 @@ export async function renderMotherHub(): Promise<void> {
   const content = el('div', { className: 'mother-content' });
 
   const balanceTile = el('section', { className: 'mother-tile mother-tile--balance mother-q-tl', 'aria-label': 'Chime balance 4272' },
-    createTileHeader('wallet', 'Chime Balance 4272'),
     el('div', { className: 'mother-tile-body' },
       el('div', { className: 'mother-balance-layout' },
         el('div', { className: 'mother-balance-left' },
+          createTileHeader('wallet', 'Chime Balance 4272'),
           el('div', { className: 'mother-balance-hero' },
             el('p', { className: 'mother-balance' },
               chimeAccount?.last_balance != null ? formatCurrency(chimeAccount.last_balance) : '—'
