@@ -265,6 +265,7 @@ body:has(.mother-app) {
   display: grid;
   grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
   gap: clamp(0.35rem, 1vw, 0.75rem);
   flex: 1;
   height: 100%;
@@ -329,16 +330,17 @@ body:has(.mother-app) {
   grid-row: 1;
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   min-width: 0;
   min-height: 0;
   height: 100%;
   align-self: stretch;
+  gap: clamp(0.25rem, 0.55vh, 0.45rem);
 }
 
 .mother-balance-transactions {
   flex: 1 1 0;
   align-self: stretch;
-  height: 100%;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -366,7 +368,7 @@ body:has(.mother-app) {
 .mother-balance-tx-intro {
   flex-shrink: 0;
   text-align: center;
-  margin: 0 0 clamp(0.15rem, 0.35vh, 0.25rem);
+  margin: 0;
 }
 
 .mother-balance-tx-intro p {
