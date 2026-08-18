@@ -80,28 +80,52 @@ serve(async (req) => {
           synced_at: syncedAt,
         }));
 
-      for (const ev of events) {
-        await supabase.from('calendar_events').upsert(ev, { onConflict: 'google_event_id' });
-      }
-
-      const googleEventIds = new Set(events.map((ev) => ev.google_event_id));
-      const { data: localSynced } = await supabase
+      const { data: existingRows } = await supabase
         .from('calendar_events')
-        .select('id, google_event_id')
+        .select('id, google_event_id, title, start_at, end_at, description')
         .not('google_event_id', 'is', null)
         .gte('start_at', syncStartIso)
         .lte('start_at', syncEndIso);
 
-      const staleIds = (localSynced ?? [])
-        .filter((row) => row.google_event_id && !googleEventIds.has(row.google_event_id))
-        .map((row) => row.id);
+      const existingByGoogleId = new Map(
+        (existingRows ?? [])
+          .filter((row) => row.google_event_id)
+          .map((row) => [row.google_event_id as string, row as SyncEventRow])
+      );
+
+      const added: SyncChangeItem[] = [];
+      const updated: SyncUpdatedItem[] = [];
+
+      for (const ev of events) {
+        const existing = existingByGoogleId.get(ev.google_event_id);
+        if (!existing) {
+          added.push(toChangeItem(ev));
+        } else if (!eventFieldsEqual(existing, ev)) {
+          updated.push({
+            ...toChangeItem(ev),
+            previous: {
+              title: existing.title,
+              start_at: existing.start_at,
+              end_at: existing.end_at,
+            },
+          });
+        }
+        await supabase.from('calendar_events').upsert(ev, { onConflict: 'google_event_id' });
+      }
+
+      const googleEventIds = new Set(events.map((ev) => ev.google_event_id));
+      const staleRows = (existingRows ?? []).filter(
+        (row) => row.google_event_id && !googleEventIds.has(row.google_event_id)
+      );
+      const staleIds = staleRows.map((row) => row.id);
+      const removed = staleRows.map((row) => toChangeItem(row as SyncEventRow));
 
       if (staleIds.length > 0) {
         await supabase.from('calendar_events').delete().in('id', staleIds);
       }
 
       const { data } = await supabase.from('calendar_events').select('*').gte('start_at', syncStartIso);
-      return json({ events: data ?? [] });
+      return json({ events: data ?? [], changes: { added, updated, removed } });
     }
 
     if (action === 'push' && event) {
@@ -196,4 +220,34 @@ interface GoogleEvent {
   description?: string;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
+}
+
+interface SyncEventRow {
+  title: string;
+  start_at: string;
+  end_at: string;
+  description: string | null;
+}
+
+interface SyncChangeItem {
+  title: string;
+  start_at: string;
+  end_at: string;
+}
+
+interface SyncUpdatedItem extends SyncChangeItem {
+  previous?: SyncChangeItem;
+}
+
+function toChangeItem(row: SyncEventRow): SyncChangeItem {
+  return { title: row.title, start_at: row.start_at, end_at: row.end_at };
+}
+
+function eventFieldsEqual(a: SyncEventRow, b: SyncEventRow): boolean {
+  return (
+    a.title === b.title &&
+    a.start_at === b.start_at &&
+    a.end_at === b.end_at &&
+    (a.description ?? null) === (b.description ?? null)
+  );
 }

@@ -6,6 +6,8 @@ import type {
   ActivityLog,
   AppSettings,
   CalendarEvent,
+  CalendarSyncChanges,
+  CalendarSyncResult,
   Document,
   FamilyUpdate,
   FinancialAccount,
@@ -330,12 +332,16 @@ export const api = {
     return snapshot;
   },
 
-  async syncCalendarFromGoogle(): Promise<CalendarEvent[]> {
+  async syncCalendarFromGoogle(): Promise<CalendarSyncResult> {
     if (isSupabaseConfigured) {
       const { data, error } = await db().functions.invoke('google-calendar-sync', {
         body: { action: 'pull' },
       });
-      const payload = (data ?? {}) as { events?: CalendarEvent[]; error?: string };
+      const payload = (data ?? {}) as {
+        events?: CalendarEvent[];
+        changes?: CalendarSyncChanges;
+        error?: string;
+      };
       if (payload.error) {
         throw new Error(payload.error);
       }
@@ -352,10 +358,19 @@ export const api = {
         throw error;
       }
       const events = (payload.events ?? []) as CalendarEvent[];
-      await this.logActivity('calendar.sync', { metadata: { event_count: events.length } });
-      return events;
+      const changes = payload.changes ?? { added: [], updated: [], removed: [] };
+      await this.logActivity('calendar.sync', {
+        metadata: {
+          event_count: events.length,
+          added: changes.added.length,
+          updated: changes.updated.length,
+          removed: changes.removed.length,
+        },
+      });
+      return { events, changes };
     }
-    return this.getCalendarEvents();
+    const events = await this.getCalendarEvents();
+    return { events, changes: { added: [], updated: [], removed: [] } };
   },
 
   async syncEventToGoogle(event: CalendarEvent): Promise<void> {

@@ -348,6 +348,78 @@
   max-width: min(96vw, 1050px);
 }
 
+.calendar-sync-review-shell {
+  max-width: min(96vw, 640px);
+}
+
+.calendar-sync-review-summary {
+  margin: 0 0 1rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.calendar-sync-review-section {
+  margin-bottom: 1.25rem;
+}
+
+.calendar-sync-review-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.calendar-sync-review-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.calendar-sync-review-badge--added {
+  background: #d5f5e3;
+  color: #1e8449;
+}
+
+.calendar-sync-review-badge--updated {
+  background: #fdebd0;
+  color: #a04000;
+}
+
+.calendar-sync-review-badge--removed {
+  background: #fadbd8;
+  color: #922b21;
+}
+
+.calendar-sync-review-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.calendar-sync-review-item {
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.calendar-sync-review-item:last-child {
+  border-bottom: none;
+}
+
+.calendar-sync-review-section--removed .calendar-sync-review-item {
+  color: var(--color-text-muted);
+}
+
 .mother-calendar-modal {
   padding-top: 0.85rem;
   max-height: min(82dvh, 780px);

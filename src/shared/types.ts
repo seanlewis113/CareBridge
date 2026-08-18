@@ -23,6 +23,27 @@ export interface CalendarEvent {
   recurrence_index?: number;
 }
 
+export interface CalendarSyncChangeItem {
+  title: string;
+  start_at: string;
+  end_at: string;
+}
+
+export interface CalendarSyncUpdatedItem extends CalendarSyncChangeItem {
+  previous?: Pick<CalendarSyncChangeItem, 'title' | 'start_at' | 'end_at'>;
+}
+
+export interface CalendarSyncChanges {
+  added: CalendarSyncChangeItem[];
+  updated: CalendarSyncUpdatedItem[];
+  removed: CalendarSyncChangeItem[];
+}
+
+export interface CalendarSyncResult {
+  events: CalendarEvent[];
+  changes: CalendarSyncChanges;
+}
+
 export interface Task {
   id: string;
   title: string;
