@@ -35,6 +35,14 @@ function updateBodyAppClass(path: string): void {
   else if (path.startsWith('/mother')) document.body.classList.add('mother-app');
 }
 
+export function showBootError(err: unknown): void {
+  console.error('App boot error:', err);
+  const root = appRoot ?? document.getElementById('app');
+  if (!root) return;
+  appRoot = root;
+  renderRouteError('/', err);
+}
+
 function renderRouteError(path: string, err: unknown): void {
   if (!appRoot) return;
   console.error(`Route error (${path}):`, err);
@@ -48,7 +56,10 @@ function renderRouteError(path: string, err: unknown): void {
   heading.textContent = 'Something went wrong';
 
   const detail = document.createElement('p');
-  detail.textContent = 'The page could not load. You can try again or return to the home screen.';
+  const errorMessage = err instanceof Error ? err.message : String(err);
+  detail.textContent = errorMessage
+    ? `The page could not load: ${errorMessage}`
+    : 'The page could not load. You can try again or return to the home screen.';
 
   const actions = document.createElement('div');
   actions.style.cssText = 'display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap';

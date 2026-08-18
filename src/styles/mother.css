@@ -260,31 +260,28 @@ body:has(.mother-app) {
   flex-direction: column;
 }
 
-/* Balance */
+/* Balance — grid keeps balance/card left, transactions right (no overlap) */
 .mother-balance-layout {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: clamp(0.5rem, 1.5vw, 1rem);
+  display: grid;
+  grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: clamp(0.35rem, 1vw, 0.75rem);
   height: 100%;
   min-height: 0;
 }
 
 .mother-balance-left {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: clamp(0.35rem, 0.8vh, 0.55rem);
-  min-width: 0;
-  max-width: min(36%, 10.5rem);
+  display: contents;
 }
 
 .mother-balance-hero {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   min-width: 0;
+  overflow: hidden;
 }
 
 .mother-balance-main {
@@ -296,13 +293,17 @@ body:has(.mother-app) {
 }
 
 .mother-balance {
-  font-size: clamp(2.25rem, 9vh, 3.75rem);
+  font-size: clamp(1.5rem, 6.5vh, 2.5rem);
   font-weight: 800;
   color: var(--color-success);
   font-family: var(--font-display);
   font-variant-numeric: tabular-nums;
   line-height: 1;
   margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mother-balance-meta {
@@ -320,7 +321,8 @@ body:has(.mother-app) {
 }
 
 .mother-balance-transactions {
-  flex: 1;
+  grid-column: 2;
+  grid-row: 1 / -1;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -452,6 +454,8 @@ body:has(.mother-app) {
 }
 
 .mother-balance-left .mother-card-images {
+  grid-column: 1;
+  grid-row: 2;
   flex: 1 1 auto;
   min-height: 0;
 }

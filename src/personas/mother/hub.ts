@@ -76,7 +76,7 @@ export async function renderMotherHub(): Promise<void> {
   const todayStr = today.toISOString().slice(0, 10);
   const todClass = timeOfDayClass();
 
-  layout.replaceChildren();
+  skeleton.remove();
 
   const header = el('div', { className: `mother-hero ${todClass}` },
     el('button', {
@@ -316,7 +316,9 @@ export async function renderMotherHub(): Promise<void> {
 
   setupIdleTimer();
   ensureMotherHubRealtime(() => {
-    void renderMotherHub();
+    void renderMotherHub().catch((err) => {
+      console.error('Mother hub refresh failed:', err);
+    });
   });
 }
 

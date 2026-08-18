@@ -1404,14 +1404,19 @@ export const api = {
 
   async getMotherHubTransactions(): Promise<Transaction[]> {
     if (isSupabaseConfigured) {
-      const { data, error } = await db()
-        .from('transactions')
-        .select('*, account:financial_accounts(*)')
-        .order('date', { ascending: false });
-      if (error) throw error;
-      return (data as Transaction[]).filter(
-        (t) => t.account?.display_on_mother_hub && !isHiddenTransaction(t)
-      );
+      try {
+        const { data, error } = await db()
+          .from('transactions')
+          .select('*, account:financial_accounts(*)')
+          .order('date', { ascending: false });
+        if (error) throw error;
+        return (data as Transaction[]).filter(
+          (t) => t.account?.display_on_mother_hub && !isHiddenTransaction(t)
+        );
+      } catch (err) {
+        console.warn('Could not load mother hub transactions:', err);
+        return [];
+      }
     }
     const transactions = getLocal('transactions');
     const accounts = getLocal('financial_accounts');

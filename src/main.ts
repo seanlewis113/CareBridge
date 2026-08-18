@@ -5,7 +5,7 @@ import './styles/calendar.css';
 import './styles/mother.css';
 import './styles/admin.css';
 
-import { initRouter, registerRoute, navigate, getCurrentRoute } from './shared/router';
+import { initRouter, registerRoute, navigate, getCurrentRoute, showBootError } from './shared/router';
 import { isAdmin, isAdminProfile, isAuthenticated, isCaregiver, isMother, isMotherPinVerified, handleAuthSignedOut, getSession, signOut } from './shared/auth';
 import { isSupabaseConfigured, getSupabase } from './shared/supabase';
 import { renderLanding, renderModuleSelect } from './personas/landing';
@@ -269,4 +269,12 @@ async function init(): Promise<void> {
   }
 }
 
-init();
+init().catch(showBootError);
+
+window.addEventListener('unhandledrejection', (event) => {
+  const app = document.getElementById('app');
+  if (app && app.childElementCount === 0) {
+    showBootError(event.reason);
+    event.preventDefault();
+  }
+});
