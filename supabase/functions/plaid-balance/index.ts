@@ -198,7 +198,7 @@ async function handleRefresh(supabase: SupabaseClient): Promise<Response> {
     supabase,
     chime.id,
     chime.plaid_access_token,
-    chime.plaid_transactions_cursor ?? null,
+    normalizePlaidCursor(chime.plaid_transactions_cursor),
     plaidAccount?.account_id
   );
 
@@ -248,15 +248,30 @@ interface TransactionSyncCounts {
   removed: number;
 }
 
+function normalizePlaidCursor(cursor: string | null | undefined): string | null {
+  if (!cursor) return null;
+  const trimmed = cursor.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function transactionBusinessKey(
+  date: string,
+  description: string,
+  amount: number
+): string {
+  const normalizedAmount = Number(amount).toFixed(2);
+  return `${date}|${description.trim().toLowerCase()}|${normalizedAmount}`;
+}
+
 async function syncTransactions(
   supabase: SupabaseClient,
   accountId: string,
   accessToken: string,
   cursor: string | null,
   plaidAccountId: string | undefined
-): Promise<{ cursor: string; counts: TransactionSyncCounts }> {
+): Promise<{ cursor: string | null; counts: TransactionSyncCounts }> {
   const counts: TransactionSyncCounts = { added: 0, modified: 0, removed: 0 };
-  let nextCursor = cursor ?? '';
+  let nextCursor = normalizePlaidCursor(cursor) ?? '';
   let hasMore = true;
 
   const pendingAdded: PlaidTransaction[] = [];
@@ -289,16 +304,38 @@ async function syncTransactions(
   await removeHiddenTransactions(supabase, accountId);
 
   if (pendingAdded.length > 0) {
-    const { data: existing } = await supabase
+    const plaidSources = pendingAdded.map((tx) => plaidImportSource(tx.transaction_id));
+    const { data: existingBySource, error: existingBySourceError } = await supabase
       .from('transactions')
       .select('import_source')
       .eq('account_id', accountId)
-      .like('import_source', 'plaid:%');
+      .in('import_source', plaidSources);
+    if (existingBySourceError) throw existingBySourceError;
 
-    const known = new Set((existing ?? []).map((row) => row.import_source));
-    const toInsert = pendingAdded
-      .filter((tx) => !known.has(plaidImportSource(tx.transaction_id)))
+    const knownSources = new Set((existingBySource ?? []).map((row) => row.import_source));
+    const candidateRows = pendingAdded
+      .filter((tx) => !knownSources.has(plaidImportSource(tx.transaction_id)))
       .map((tx) => mapPlaidTransaction(tx, accountId));
+
+    const candidateDates = [...new Set(candidateRows.map((row) => row.date))];
+    const { data: existingByKey, error: existingByKeyError } = candidateDates.length > 0
+      ? await supabase
+        .from('transactions')
+        .select('date, description, amount')
+        .eq('account_id', accountId)
+        .in('date', candidateDates)
+      : { data: [], error: null };
+    if (existingByKeyError) throw existingByKeyError;
+
+    const knownBusinessKeys = new Set(
+      (existingByKey ?? []).map((row) =>
+        transactionBusinessKey(row.date, row.description, Number(row.amount))
+      )
+    );
+
+    const toInsert = candidateRows.filter(
+      (row) => !knownBusinessKeys.has(transactionBusinessKey(row.date, row.description, row.amount))
+    );
 
     if (toInsert.length > 0) {
       const { error } = await supabase.from('transactions').insert(toInsert);
@@ -347,7 +384,7 @@ async function syncTransactions(
     counts.removed = pendingRemoved.length;
   }
 
-  return { cursor: nextCursor, counts };
+  return { cursor: normalizePlaidCursor(nextCursor), counts };
 }
 
 function plaidImportSource(transactionId: string): string {

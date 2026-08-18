@@ -132,10 +132,6 @@ export async function renderMotherHub(): Promise<void> {
           )
         ),
         el('div', { className: 'mother-balance-right' },
-          el('div', { className: 'mother-balance-tx-intro' },
-            el('p', {}, 'Chime is your new debit card.'),
-            el('p', {}, 'Sean will transfer money to it as needed.')
-          ),
           renderMotherBalanceTransactions(chimeTransactions)
         )
       )
@@ -684,6 +680,10 @@ function renderMotherBalanceTransactions(transactions: Transaction[]): HTMLEleme
     tabindex: '0',
     'aria-label': 'Open all transactions',
   },
+    el('div', { className: 'mother-balance-tx-intro' },
+      el('p', {}, 'Chime is your new debit card.'),
+      el('p', {}, 'Sean will transfer money to it as needed.')
+    ),
     el('p', { className: 'mother-balance-tx-heading' }, 'Recent Transactions')
   );
 
