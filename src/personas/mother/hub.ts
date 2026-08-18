@@ -671,13 +671,17 @@ function formatTransactionDate(dateStr: string): string {
 }
 
 function renderMotherBalanceTransactions(transactions: Transaction[]): HTMLElement {
-  const recent = transactions.slice(0, 10);
+  const recent = transactions.slice(0, 7);
   const panel = el('div', {
     className: 'mother-balance-transactions',
     role: 'button',
     tabindex: '0',
     'aria-label': 'Open all transactions',
   },
+    el('div', { className: 'mother-balance-tx-intro' },
+      el('p', {}, 'Chime is your new debit card.'),
+      el('p', {}, 'Sean will transfer money to it as needed.')
+    ),
     el('p', { className: 'mother-balance-tx-heading' }, 'Recent Transactions')
   );
 

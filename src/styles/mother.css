@@ -352,6 +352,20 @@ body:has(.mother-app) {
   outline-offset: 2px;
 }
 
+.mother-balance-tx-intro {
+  flex-shrink: 0;
+  text-align: center;
+  margin: 0;
+}
+
+.mother-balance-tx-intro p {
+  margin: 0;
+  font-size: clamp(0.75rem, 1.6vh, 0.9rem);
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-text);
+}
+
 .mother-balance-tx-heading {
   margin: 0;
   font-size: clamp(0.72rem, 1.5vh, 0.85rem);
@@ -373,8 +387,7 @@ body:has(.mother-app) {
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  padding-bottom: 0.2rem;
 }
 
 .mother-balance-tx-list .card-table-row--mother-tx,
@@ -382,7 +395,8 @@ body:has(.mother-app) {
   grid-template-columns: 3.5rem minmax(0, 1fr) minmax(3.5rem, auto);
   gap: 0.35rem;
   align-items: center;
-  padding: 0.12rem 0;
+  padding: clamp(0.28rem, 0.65vh, 0.42rem) 0;
+  line-height: 1.45;
 }
 
 .mother-balance-tx-list .card-table-header,
@@ -392,18 +406,19 @@ body:has(.mother-app) {
 
 .mother-balance-tx-list .card-table-header .card-table-row,
 .mother-tx-modal-list .card-table-header .card-table-row {
-  font-size: clamp(0.58rem, 1.2vh, 0.68rem);
+  font-size: clamp(0.62rem, 1.3vh, 0.72rem);
+  padding-bottom: clamp(0.2rem, 0.45vh, 0.3rem);
 }
 
 .mother-balance-tx-date {
-  font-size: clamp(0.58rem, 1.2vh, 0.7rem);
+  font-size: clamp(0.65rem, 1.35vh, 0.78rem);
   color: var(--color-text-muted);
   font-weight: 700;
   white-space: nowrap;
 }
 
 .mother-balance-tx-desc {
-  font-size: clamp(0.58rem, 1.2vh, 0.72rem);
+  font-size: clamp(0.65rem, 1.35vh, 0.8rem);
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -411,7 +426,7 @@ body:has(.mother-app) {
 }
 
 .mother-balance-tx-amount {
-  font-size: clamp(0.58rem, 1.2vh, 0.72rem);
+  font-size: clamp(0.65rem, 1.35vh, 0.8rem);
   font-weight: 800;
   text-align: right;
   font-variant-numeric: tabular-nums;
