@@ -233,6 +233,7 @@ export interface Database {
           description: string;
           amount: number;
           category: string | null;
+          category_override: boolean;
           import_source: string;
           created_at: string;
         };
@@ -243,6 +244,7 @@ export interface Database {
           description: string;
           amount: number;
           category?: string | null;
+          category_override?: boolean;
           import_source: string;
           created_at?: string;
         };

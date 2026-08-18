@@ -5,6 +5,8 @@ import { renderAdminShell } from '../shared/shell';
 import { el, formatCurrency, formatDate, showModal, showToast } from '../../shared/utils';
 import * as XLSX from 'xlsx';
 import type { FinancialAccount, Transaction } from '../../shared/types';
+import { isHiddenTransaction } from '../../shared/transactionFilters';
+import { buildTransactionCategoryOptions } from '../../shared/transactionCategories';
 
 function isChimeAutoSyncEnabled(account: FinancialAccount | undefined): boolean {
   return !!account?.plaid_item_id;
@@ -107,9 +109,11 @@ export async function renderAdminFinance(): Promise<void> {
   content.append(summary);
 
   content.append(el('h3', {}, 'Spending by Category'));
-  content.append(renderCategoryChart(transactions));
+  const categoryChart = el('div', { id: 'category-chart' }, renderCategoryChart(transactions));
+  content.append(categoryChart);
 
   content.append(el('h3', { style: 'margin-top:1.5rem' }, 'Recent Transactions'));
+  const categoryOptions = buildTransactionCategoryOptions(transactions);
   const txList = el('div', { className: 'card' });
   if (transactions.length === 0) {
     txList.append(el('p', { className: 'empty-state' },
@@ -138,7 +142,9 @@ export async function renderAdminFinance(): Promise<void> {
               tx.account?.institution ?? 'Account'
             )
           ),
-          el('span', { className: 'card-table-muted' }, tx.category ?? 'Uncategorized'),
+          renderTransactionCategorySelect(tx, categoryOptions, () => {
+            categoryChart.replaceChildren(renderCategoryChart(transactions));
+          }),
           el('span', {
             style: 'font-weight:700;text-align:right;color:' + (tx.amount < 0 ? 'var(--color-danger)' : 'var(--color-success)'),
           }, formatCurrency(tx.amount))
@@ -234,6 +240,39 @@ function renderCategoryChart(transactions: Transaction[]): HTMLElement {
   }
 
   return container;
+}
+
+function renderTransactionCategorySelect(
+  tx: Transaction,
+  categoryOptions: string[],
+  onUpdated: () => void
+): HTMLElement {
+  const select = el('select', {
+    className: 'tx-category-select',
+    'aria-label': `Category for ${tx.description}`,
+  },
+    el('option', { value: '' }, 'Uncategorized'),
+    ...categoryOptions.map((category) => el('option', { value: category }, category))
+  );
+  select.value = tx.category ?? '';
+
+  select.addEventListener('change', async () => {
+    const previous = tx.category;
+    const category = select.value || null;
+    select.disabled = true;
+    try {
+      await api.updateTransaction(tx.id, { category, category_override: true });
+      tx.category = category;
+      onUpdated();
+    } catch (err) {
+      select.value = previous ?? '';
+      showToast(err instanceof Error ? err.message : 'Could not update category');
+    } finally {
+      select.disabled = false;
+    }
+  });
+
+  return select;
 }
 
 function renderChimeBalanceForm(currentBalance: number | null, onSuccess: () => void): HTMLElement {
@@ -404,10 +443,13 @@ function parseTransactionRows(
     const dateVal = parseDate(row[dateKey]);
     if (!dateVal) continue;
 
+    const description = String(row[descKey] ?? 'Transaction');
+    if (isHiddenTransaction({ description })) continue;
+
     results.push({
       account_id: accountId,
       date: dateVal,
-      description: String(row[descKey] ?? 'Transaction'),
+      description,
       amount,
       category: guessCategory(String(row[descKey] ?? '')),
       import_source: `${source}:${fileName}`,

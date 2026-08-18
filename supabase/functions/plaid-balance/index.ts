@@ -273,16 +273,20 @@ async function syncTransactions(
 
     for (const tx of (res.added ?? []) as PlaidTransaction[]) {
       if (plaidAccountId && tx.account_id !== plaidAccountId) continue;
+      if (isHiddenPlaidTransaction(tx)) continue;
       pendingAdded.push(tx);
     }
     for (const tx of (res.modified ?? []) as PlaidTransaction[]) {
       if (plaidAccountId && tx.account_id !== plaidAccountId) continue;
+      if (isHiddenPlaidTransaction(tx)) continue;
       pendingModified.push(tx);
     }
     for (const id of (res.removed ?? []) as { transaction_id?: string }[]) {
       if (id.transaction_id) pendingRemoved.push(id.transaction_id);
     }
   }
+
+  await removeHiddenTransactions(supabase, accountId);
 
   if (pendingAdded.length > 0) {
     const { data: existing } = await supabase
@@ -303,14 +307,33 @@ async function syncTransactions(
     }
   }
 
-  for (const tx of pendingModified) {
-    const { error } = await supabase
+  if (pendingModified.length > 0) {
+    const sources = pendingModified.map((tx) => plaidImportSource(tx.transaction_id));
+    const { data: existingRows } = await supabase
       .from('transactions')
-      .update(mapPlaidTransaction(tx, accountId))
+      .select('import_source, category_override')
       .eq('account_id', accountId)
-      .eq('import_source', plaidImportSource(tx.transaction_id));
-    if (error) throw error;
-    counts.modified += 1;
+      .in('import_source', sources);
+
+    const overrideBySource = new Map(
+      (existingRows ?? []).map((row) => [row.import_source, row.category_override === true])
+    );
+
+    for (const tx of pendingModified) {
+      const source = plaidImportSource(tx.transaction_id);
+      const mapped = mapPlaidTransaction(tx, accountId);
+      const payload = overrideBySource.get(source)
+        ? (({ category: _category, ...rest }) => rest)(mapped)
+        : mapped;
+
+      const { error } = await supabase
+        .from('transactions')
+        .update(payload)
+        .eq('account_id', accountId)
+        .eq('import_source', source);
+      if (error) throw error;
+      counts.modified += 1;
+    }
   }
 
   if (pendingRemoved.length > 0) {
@@ -329,6 +352,25 @@ async function syncTransactions(
 
 function plaidImportSource(transactionId: string): string {
   return `plaid:${transactionId}`;
+}
+
+const HIDDEN_TX_PATTERN = 'card payment from secured account';
+
+function isHiddenPlaidTransaction(tx: PlaidTransaction): boolean {
+  const text = [tx.merchant_name, tx.name, tx.original_description]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return text.includes(HIDDEN_TX_PATTERN);
+}
+
+async function removeHiddenTransactions(supabase: SupabaseClient, accountId: string): Promise<void> {
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('account_id', accountId)
+    .ilike('description', `%${HIDDEN_TX_PATTERN}%`);
+  if (error) throw error;
 }
 
 function mapPlaidTransaction(
@@ -410,6 +452,7 @@ interface PlaidTransaction {
   authorized_date?: string;
   name?: string;
   merchant_name?: string;
+  original_description?: string;
   category?: string[];
   personal_finance_category?: { primary?: string };
 }

@@ -531,7 +531,18 @@ button, input, select, textarea {
 }
 
 .card-table-row--tx {
-  grid-template-columns: minmax(4.5rem, auto) 1fr minmax(4rem, auto) minmax(4.5rem, auto);
+  grid-template-columns: minmax(4.5rem, auto) 1fr minmax(7rem, 9rem) minmax(4.5rem, auto);
+}
+
+.tx-category-select {
+  width: 100%;
+  max-width: 100%;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
 }
 
 .card-table-row--visit {

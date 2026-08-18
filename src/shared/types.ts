@@ -152,6 +152,7 @@ export interface Transaction {
   description: string;
   amount: number;
   category: string | null;
+  category_override?: boolean;
   import_source: string;
   account?: FinancialAccount;
 }

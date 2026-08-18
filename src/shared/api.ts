@@ -23,6 +23,7 @@ import type {
   Transaction,
   VisitNote,
 } from './types';
+import { isHiddenTransaction } from './transactionFilters';
 
 type TableName = keyof ReturnType<typeof loadLocalStore>;
 
@@ -1389,11 +1390,13 @@ export const api = {
         .select('*, account:financial_accounts(*)')
         .order('date', { ascending: false });
       if (error) throw error;
-      return data as Transaction[];
+      return (data as Transaction[]).filter((t) => !isHiddenTransaction(t));
     }
     const transactions = getLocal('transactions');
     const accounts = getLocal('financial_accounts');
-    return transactions.map((t) => ({
+    return transactions
+      .filter((t) => !isHiddenTransaction(t))
+      .map((t) => ({
       ...t,
       account: accounts.find((a) => a.id === t.account_id),
     }));
@@ -1415,6 +1418,44 @@ export const api = {
 
     updateLocal('transactions', (items) => [...withIds, ...items]);
     return withIds.length;
+  },
+
+  async updateTransaction(
+    id: string,
+    updates: Partial<Pick<Transaction, 'category' | 'category_override'>>
+  ): Promise<Transaction> {
+    if (isSupabaseConfigured) {
+      const { data: before, error: beforeError } = await db()
+        .from('transactions')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (beforeError) throw beforeError;
+      const { data, error } = await db()
+        .from('transactions')
+        .update(updates)
+        .eq('id', id)
+        .select('*, account:financial_accounts(*)')
+        .single();
+      if (error) throw error;
+      await this.logActivity('transaction.update', {
+        entityType: 'transaction',
+        entityId: id,
+        metadata: { changes: updates, previous: pickPrevious(before as Transaction, updates) },
+      });
+      return data as Transaction;
+    }
+    let updated!: Transaction;
+    updateLocal('transactions', (items) =>
+      items.map((t) => {
+        if (t.id === id) {
+          updated = { ...t, ...updates };
+          return updated;
+        }
+        return t;
+      })
+    );
+    return updated;
   },
 
   async logFinancialAccess(profileId: string | null, action: string): Promise<void> {
