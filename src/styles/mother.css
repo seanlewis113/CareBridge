@@ -260,11 +260,11 @@ body:has(.mother-app) {
   flex-direction: column;
 }
 
-/* Balance — 2-row grid: hero + card left; intro + transactions span full height right */
+/* Balance — side-by-side columns; right column fills full height */
 .mother-balance-layout {
   display: grid;
   grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   align-items: stretch;
   gap: clamp(0.35rem, 1vw, 0.75rem);
   flex: 1;
@@ -273,15 +273,18 @@ body:has(.mother-app) {
 }
 
 .mother-balance-left {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: clamp(0.35rem, 0.8vh, 0.5rem);
 }
 
 .mother-balance-hero {
-  grid-column: 1;
-  grid-row: 1;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
   overflow: hidden;
 }
@@ -323,19 +326,16 @@ body:has(.mother-app) {
 }
 
 .mother-balance-right {
-  grid-column: 2;
-  grid-row: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   gap: clamp(0.25rem, 0.55vh, 0.45rem);
 }
 
 .mother-balance-transactions {
-  flex: 1 1 0;
-  align-self: stretch;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -361,11 +361,7 @@ body:has(.mother-app) {
 }
 
 .mother-balance-tx-intro {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 0;
+  flex-shrink: 0;
   text-align: center;
   margin: 0;
 }
@@ -482,8 +478,6 @@ body:has(.mother-app) {
 }
 
 .mother-card-images {
-  grid-column: 1;
-  grid-row: 2;
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
