@@ -207,6 +207,33 @@ export function parseRecurringRule(event: CalendarEvent): EventRecurrenceRule | 
   }
 }
 
+export function isRecurringCalendarEvent(event: CalendarEvent): boolean {
+  return event.recurrence_source_id != null || parseRecurringRule(event) != null;
+}
+
+export function countCalendarEventsByRecurrence(events: CalendarEvent[]): { recurring: number; nonRecurring: number } {
+  let recurring = 0;
+  let nonRecurring = 0;
+  for (const event of events) {
+    if (isRecurringCalendarEvent(event)) recurring++;
+    else nonRecurring++;
+  }
+  return { recurring, nonRecurring };
+}
+
+export function formatCalendarEventCountSummary(events: CalendarEvent[]): string {
+  const { recurring, nonRecurring } = countCalendarEventsByRecurrence(events);
+  const parts: string[] = [];
+  if (nonRecurring > 0) {
+    parts.push(`${nonRecurring} non-recurring ${nonRecurring === 1 ? 'event' : 'events'}`);
+  }
+  if (recurring > 0) {
+    parts.push(`${recurring} recurring ${recurring === 1 ? 'event' : 'events'}`);
+  }
+  if (parts.length === 0) return 'No upcoming events';
+  return parts.join(' · ');
+}
+
 export function expandRecurringEvents(events: CalendarEvent[], from?: string, to?: string): CalendarEvent[] {
   const fromDate = from ? new Date(from) : new Date();
   const toDate = to ? new Date(to) : new Date(fromDate.getFullYear(), fromDate.getMonth() + DEFAULT_RECURRENCE_MONTHS, fromDate.getDate());

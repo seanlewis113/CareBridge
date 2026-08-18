@@ -5,7 +5,7 @@ import {
   renderCalendarListView,
   renderCalendarViewToggle,
 } from '../../shared/calendarViews';
-import { formatCalendarLastSynced, getLatestCalendarSyncAt } from '../../shared/calendarRecurrence';
+import { formatCalendarEventCountSummary, formatCalendarLastSynced, getLatestCalendarSyncAt } from '../../shared/calendarRecurrence';
 import { renderAdminShell } from '../shared/shell';
 import { el, confirmDialog, formatDateTime, showModal } from '../../shared/utils';
 import { openEventEditorModal } from '../mother/add-event';
@@ -58,7 +58,7 @@ export async function renderAdminCalendar(): Promise<void> {
     };
 
     if (viewMode === 'grid') {
-      eventsContainer.append(renderCalendarGridView(events, { ...eventActions, scrollable: true }));
+      eventsContainer.append(renderCalendarGridView(events, { ...eventActions, scrollable: true, showLastSynced: false }));
       return;
     }
 
@@ -82,8 +82,9 @@ export async function renderAdminCalendar(): Promise<void> {
       const { events, changes } = await api.syncCalendarFromGoogle();
       const changeCount = countSyncChanges(changes);
       const lastSynced = formatCalendarLastSynced(getLatestCalendarSyncAt(events));
+      const eventCounts = formatCalendarEventCountSummary(events);
       if (changeCount === 0) {
-        statusEl.textContent = `Google Calendar is up to date (${events.length} upcoming events). ${lastSynced}.`;
+        statusEl.textContent = `Google Calendar is up to date (${eventCounts}). ${lastSynced}.`;
       } else {
         statusEl.textContent = `Synced ${changeCount} change${changeCount === 1 ? '' : 's'} from Google Calendar. ${lastSynced}.`;
         showCalendarSyncReviewModal(changes);

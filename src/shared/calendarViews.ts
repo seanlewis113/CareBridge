@@ -2,6 +2,7 @@ import type { CalendarEvent } from './types';
 import { el, formatDate, formatTime } from './utils';
 import { icon, type IconName } from './icons';
 import {
+  formatCalendarEventCountSummary,
   formatCalendarLastSynced,
   formatEventSyncedLabel,
   formatEventSyncedTitle,
@@ -51,6 +52,7 @@ export interface CalendarListOptions {
 
 export interface CalendarGridOptions {
   showToolbar?: boolean;
+  showLastSynced?: boolean;
   scrollable?: boolean;
   onEdit?: (event: CalendarEvent) => void | Promise<void>;
 }
@@ -128,16 +130,15 @@ export function renderCalendarGridView(events: CalendarEvent[], options: Calenda
   }
 
   if (showToolbar) {
+    const showLastSynced = options.showLastSynced !== false;
     const header = el('div', { className: 'app-calendar-toolbar' });
     const toolbarMeta = el('div', { className: 'app-calendar-toolbar-meta' });
     toolbarMeta.append(
-      el(
-        'p',
-        { className: 'app-calendar-subtitle' },
-        `${events.length} upcoming ${events.length === 1 ? 'event' : 'events'}`
-      ),
-      renderCalendarLastSyncedMeta(events)
+      el('p', { className: 'app-calendar-subtitle' }, formatCalendarEventCountSummary(events))
     );
+    if (showLastSynced) {
+      toolbarMeta.append(renderCalendarLastSyncedMeta(events));
+    }
     const todayBtn = el(
       'button',
       { className: 'app-calendar-today-btn', type: 'button', 'aria-label': 'Jump to today' },
