@@ -438,16 +438,18 @@ async function renderCroppedCardImage(
   originalSrc: string,
   zoom: number,
   offsetX: number,
-  offsetY: number
+  offsetY: number,
+  viewportWidth = CARD_PREVIEW_WIDTH,
+  viewportHeight = CARD_PREVIEW_HEIGHT
 ): Promise<string> {
   const image = await loadImage(originalSrc);
   const canvas = document.createElement('canvas');
-  canvas.width = CARD_PREVIEW_WIDTH;
-  canvas.height = CARD_PREVIEW_HEIGHT;
+  canvas.width = Math.round(viewportWidth);
+  canvas.height = Math.round(viewportHeight);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas context unavailable');
 
-  const layout = calculateCropLayout(CARD_PREVIEW_WIDTH, CARD_PREVIEW_HEIGHT, image.width, image.height, zoom, offsetX, offsetY);
+  const layout = calculateCropLayout(canvas.width, canvas.height, image.width, image.height, zoom, offsetX, offsetY);
 
   ctx.drawImage(image, layout.drawX, layout.drawY, layout.drawWidth, layout.drawHeight);
   return canvas.toDataURL('image/jpeg', 0.92);
@@ -628,7 +630,15 @@ async function showCardCropDialog(originalSrc: string, label: string): Promise<C
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       try {
-        const cropped = await renderCroppedCardImage(originalSrc, zoom, offsetX, offsetY);
+        const { windowRect } = getCropMetrics();
+        const cropped = await renderCroppedCardImage(
+          originalSrc,
+          zoom,
+          offsetX,
+          offsetY,
+          windowRect.width,
+          windowRect.height
+        );
         window.removeEventListener('resize', refreshPreview);
         close();
         resolve({ original: originalSrc, cropped, zoom, offsetX, offsetY });
