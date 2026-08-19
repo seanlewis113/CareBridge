@@ -32,6 +32,42 @@ import { renderCaregiverDocuments } from './personas/caregiver/documents';
 import { api } from './shared/api';
 import { mountVersionBadge } from './shared/version';
 
+const STALE_RECOVERY_KEY = 'moms-care-stale-recovery-attempted';
+
+function isStaleAssetError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('failed to fetch dynamically imported module') ||
+    normalized.includes('importing a module script failed') ||
+    normalized.includes('loading chunk') ||
+    normalized.includes('chunkloaderror')
+  );
+}
+
+async function recoverFromStaleClient(reason: unknown): Promise<boolean> {
+  if (!import.meta.env.PROD) return false;
+  if (!isStaleAssetError(reason)) return false;
+  if (sessionStorage.getItem(STALE_RECOVERY_KEY) === '1') return false;
+
+  try {
+    sessionStorage.setItem(STALE_RECOVERY_KEY, '1');
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+    if ('caches' in window) {
+      const cacheKeys = await caches.keys();
+      await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+    }
+    window.location.reload();
+    return true;
+  } catch (recoveryError) {
+    console.warn('Stale client recovery failed:', recoveryError);
+    return false;
+  }
+}
+
 async function guardMother(): Promise<boolean> {
   if (!isMother() || !isMotherPinVerified()) {
     await navigate('/');
@@ -232,6 +268,7 @@ function initAuthListener(): void {
 async function init(): Promise<void> {
   const app = document.getElementById('app');
   if (!app) return;
+  sessionStorage.removeItem(STALE_RECOVERY_KEY);
 
   initAuthListener();
 
@@ -272,9 +309,23 @@ async function init(): Promise<void> {
 init().catch(showBootError);
 
 window.addEventListener('unhandledrejection', (event) => {
-  const app = document.getElementById('app');
-  if (app && app.childElementCount === 0) {
-    showBootError(event.reason);
-    event.preventDefault();
-  }
+  void recoverFromStaleClient(event.reason).then((recovered) => {
+    if (recovered) return;
+    const app = document.getElementById('app');
+    if (app && app.childElementCount === 0) {
+      showBootError(event.reason);
+      event.preventDefault();
+    }
+  });
 });
+
+window.addEventListener('error', (event) => {
+  void recoverFromStaleClient(event.error ?? event.message).then((recovered) => {
+    if (recovered) return;
+    const app = document.getElementById('app');
+    if (app && app.childElementCount === 0) {
+      showBootError(event.error ?? event.message);
+    }
+  });
+});
+

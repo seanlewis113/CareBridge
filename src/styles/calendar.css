@@ -421,8 +421,16 @@
 }
 
 .mother-calendar-modal {
+  display: flex;
+  flex-direction: column;
   padding-top: 0.85rem;
   max-height: min(82dvh, 780px);
+  overflow: hidden;
+}
+
+.mother-calendar-modal-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 

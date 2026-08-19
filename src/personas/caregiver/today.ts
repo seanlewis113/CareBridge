@@ -127,11 +127,14 @@ function renderSchedulePanel(events: CalendarEvent[]): HTMLElement {
   viewAll.addEventListener('click', () => navigate('/caregiver/calendar'));
   head.append(viewAll);
   panel.append(head);
-  panel.append(
-    el('p', { className: 'calendar-last-synced calendar-last-synced--panel' },
-      formatCalendarLastSynced(getLatestCalendarSyncAt(events))
-    )
-  );
+  const syncedAt = getLatestCalendarSyncAt(events);
+  if (syncedAt) {
+    panel.append(
+      el('p', { className: 'calendar-last-synced calendar-last-synced--panel' },
+        formatCalendarLastSynced(syncedAt)
+      )
+    );
+  }
 
   if (events.length === 0) {
     panel.append(el('p', { className: 'caregiver-dash-empty' }, 'No events scheduled today.'));

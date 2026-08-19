@@ -60,6 +60,16 @@ function isMotherDeviceSession(): boolean {
   }
 }
 
+function resolveCalendarEventPersona(explicit?: Persona | null): Persona | null {
+  if (explicit) return explicit;
+  if (isMotherDeviceSession()) return 'mother';
+  return activityContext.persona;
+}
+
+export function isMomOwnedCalendarEvent(event: CalendarEvent): boolean {
+  return event.created_by_persona === 'mother';
+}
+
 interface ActivityContext {
   profileId: string | null;
   persona: Persona | null;
@@ -234,9 +244,15 @@ export const api = {
     return getLocal('calendar_events').find((e) => e.id === sourceId) ?? null;
   },
 
-  async createCalendarEvent(event: Omit<CalendarEvent, 'id' | 'created_at' | 'synced_at'>): Promise<CalendarEvent> {
+  async createCalendarEvent(
+    event: Omit<CalendarEvent, 'id' | 'created_at' | 'synced_at' | 'created_by_persona'> & {
+      created_by_persona?: Persona | null;
+    }
+  ): Promise<CalendarEvent> {
+    const createdByPersona = resolveCalendarEventPersona(event.created_by_persona);
     const newEvent: CalendarEvent = {
       ...event,
+      created_by_persona: createdByPersona,
       id: crypto.randomUUID(),
       synced_at: null,
       created_at: new Date().toISOString(),
@@ -246,7 +262,9 @@ export const api = {
       const { data, error } = await db().from('calendar_events').insert(newEvent).select().single();
       if (error) throw error;
       const created = data as CalendarEvent;
-      await this.syncEventToGoogle(created);
+      if (!isMomOwnedCalendarEvent(created)) {
+        await this.syncEventToGoogle(created);
+      }
       await this.logActivity('calendar.create', {
         entityType: 'calendar_event',
         entityId: created.id,
@@ -275,7 +293,9 @@ export const api = {
         .single();
       if (error) throw error;
       const updated = data as CalendarEvent;
-      await this.syncEventToGoogle(updated);
+      if (!isMomOwnedCalendarEvent(updated)) {
+        await this.syncEventToGoogle(updated);
+      }
       await this.logActivity('calendar.update', {
         entityType: 'calendar_event',
         entityId: id,

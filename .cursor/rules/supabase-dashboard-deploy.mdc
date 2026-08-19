@@ -1,0 +1,263 @@
+---
+description: Deploy Supabase edge functions and secrets via Dashboard (browser only)
+globs: supabase/functions/**
+alwaysApply: false
+---
+
+# Supabase Dashboard deploy
+
+Corporate network blocks the Supabase CLI. Deploy only through the browser.
+
+When edge function code changes, always tell the user the full numbered steps below — never a one-line "paste and deploy" summary alone. Fill in the specific function name and repo file path.
+
+## Manual next steps policy (global)
+
+If any required next step must be done manually by the user (especially in a browser or dashboard), always provide detailed, click-by-click instructions. Do not end with vague guidance like "do this in the dashboard."
+
+Requirements:
+- Always include a clear heading: **Manual next steps required — <task name>**
+- Use numbered steps in execution order, with enough detail that a first-time user can follow without guessing
+- For browser actions, include exact navigation: URL, where to click, which tab/section/menu to open, what to paste/type, and which button to press to save/deploy/run
+- Include verification instructions after each important step (what success looks like in the UI)
+- If there are multiple valid paths, label them as **Option A**, **Option B**, and state which is recommended
+- If credentials/secrets are needed, provide labeled placeholders and where each value should be entered
+- Never provide only a high-level summary when manual action is required
+- Keep all pasteable values in fenced code blocks per the copy-button formatting rules below
+
+## Copy-button formatting (required)
+
+Cursor shows a **copy button** on fenced code blocks. Every value the user must paste into the browser must appear in its own fenced block — never inline in prose or bullet lists.
+
+Rules:
+- **URLs** — one URL per block, labeled (e.g. "Functions dashboard URL")
+- **Edge function code** — read `supabase/functions/<name>/index.ts` and output the **full file** in a `typescript` block
+- **Cron / form fields** — each field in a separate block (name, schedule, body, header name, header value)
+- **Secrets** — one block per secret name/value pair, or a labeled template block
+- **SQL** — full script in a `sql` block (read from repo or use template below)
+
+Never bury pasteable content in numbered-list text, blockquotes, or backtick spans alone.
+
+## Deploy edge function code
+
+Functions: `create-user`, `google-calendar-sync`, `plaid-balance`
+
+Tell the user:
+
+1. Open the Functions dashboard (copy URL below)
+2. Click the function name shown below
+3. Open the **Code** tab
+4. Select all existing code, paste the full contents from the code block below
+5. Click **Deploy**
+
+**Functions dashboard URL:**
+
+```
+https://supabase.com/dashboard/project/zliprdkszovsihdvzrye/functions
+```
+
+**Function to click:**
+
+```
+google-calendar-sync
+```
+
+**Code to paste** (read and paste the complete file from the repo):
+
+```typescript
+// full contents of supabase/functions/google-calendar-sync/index.ts
+```
+
+### Example response shape
+
+Use this structure when reporting a deploy (replace function name and read the real file for the code block):
+
+**Deploy required — google-calendar-sync**
+
+**Step 1 — Open Functions**
+
+```
+https://supabase.com/dashboard/project/zliprdkszovsihdvzrye/functions
+```
+
+**Step 2 — Click function**
+
+```
+google-calendar-sync
+```
+
+**Step 3 — Code tab → replace all → paste this:**
+
+```typescript
+// entire supabase/functions/google-calendar-sync/index.ts
+```
+
+**Step 4 — Click Deploy**
+
+## Update secrets
+
+When secret values change, tell the user:
+
+1. Open the Secrets page (copy URL below)
+2. Add or update each secret using the name/value blocks below (user fills in real values where shown)
+
+**Secrets page URL:**
+
+```
+https://supabase.com/dashboard/project/zliprdkszovsihdvzrye/functions
+```
+
+(Then open **Secrets** in the left sidebar.)
+
+**Secret name:**
+
+```
+PLAID_CLIENT_ID
+```
+
+**Secret value:**
+
+```
+<paste your Plaid client ID>
+```
+
+Repeat a separate name/value block pair for each secret:
+
+```
+PLAID_SECRET
+```
+
+```
+<paste your Plaid secret>
+```
+
+```
+PLAID_ENV
+```
+
+```
+production
+```
+
+```
+GOOGLE_CLIENT_ID
+```
+
+```
+<paste your Google client ID>
+```
+
+```
+GOOGLE_CLIENT_SECRET
+```
+
+```
+<paste your Google client secret>
+```
+
+```
+CRON_SECRET
+```
+
+```
+<paste or generate a cron secret>
+```
+
+No redeploy needed after secret changes.
+
+## Google Calendar auto-sync (every 2 hours)
+
+After deploying `google-calendar-sync` and setting `CRON_SECRET`, choose one:
+
+### Option A — Cron integration (recommended)
+
+1. Open Cron jobs (copy URL below)
+2. Click **Create job**
+3. Paste each field from the blocks below into the form
+4. Save the job
+
+**Cron jobs URL:**
+
+```
+https://supabase.com/dashboard/project/zliprdkszovsihdvzrye/integrations/cron/jobs
+```
+
+**Name:**
+
+```
+sync-google-calendar
+```
+
+**Schedule:**
+
+```
+0 */2 * * *
+```
+
+**Type:** Supabase Edge Function (select in UI — not pasteable)
+
+**Function:**
+
+```
+google-calendar-sync
+```
+
+**Body:**
+
+```json
+{"action":"pull"}
+```
+
+**HTTP header name:**
+
+```
+x-cron-secret
+```
+
+**HTTP header value:**
+
+```
+<paste your CRON_SECRET>
+```
+
+### Option B — SQL (pg_cron)
+
+1. Ensure `pg_cron` and `pg_net` are enabled (Database → Extensions)
+2. Open the SQL Editor
+3. Replace `YOUR_CRON_SECRET` in the script below with your real secret, then paste and run the full block
+
+**SQL to paste** (read `supabase/google-calendar-sync-cron.sql` or use this template after substituting the secret):
+
+```sql
+SELECT cron.unschedule('sync-google-calendar')
+WHERE EXISTS (
+  SELECT 1 FROM cron.job WHERE jobname = 'sync-google-calendar'
+);
+
+SELECT cron.schedule(
+  'sync-google-calendar',
+  '0 */2 * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://zliprdkszovsihdvzrye.supabase.co/functions/v1/google-calendar-sync',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-cron-secret', 'YOUR_CRON_SECRET'
+    ),
+    body := '{"action":"pull"}'::jsonb
+  ) AS request_id;
+  $$
+);
+```
+
+## Plaid production setup
+
+If Plaid production access is blocked, tell the user:
+
+1. Open the DTM page (copy URL below)
+2. Complete the DTM use case
+
+**Plaid DTM URL:**
+
+```
+https://dashboard.plaid.com/link/data-transparency-v5
+```

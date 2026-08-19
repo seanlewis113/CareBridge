@@ -1,4 +1,4 @@
-import { api } from '../../shared/api';
+import { api, isMomOwnedCalendarEvent } from '../../shared/api';
 import { clearActivePersona, isAuthenticated } from '../../shared/auth';
 import { navigate, MODULE_SELECT_PATH } from '../../shared/router';
 import {
@@ -11,9 +11,9 @@ import {
   type CalendarViewMode,
 } from '../../shared/calendarViews';
 import { formatEventTime, formatCalendarLastSynced, formatCalendarEventCountSummary, getLatestCalendarSyncAt } from '../../shared/calendarRecurrence';
-import { el, greeting, formatDate, formatCurrency, showModal, timeOfDayClass, showToast } from '../../shared/utils';
+import { el, greeting, formatDate, formatCurrency, showModal, timeOfDayClass, showToast, confirmDialog } from '../../shared/utils';
 import { icon, type IconName } from '../../shared/icons';
-import { renderAddEventForm } from './add-event';
+import { renderAddEventForm, openEventEditorModal } from './add-event';
 import { ensureMotherHubRealtime, teardownMotherHubRealtime } from '../../shared/realtime';
 import { getAreaAssigneeIds } from '../../shared/responsibilityAssignments';
 import type { CalendarEvent, Transaction } from '../../shared/types';
@@ -770,18 +770,57 @@ function showAllChimeTransactionsModal(transactions: Transaction[]): void {
   body.closest('.modal')?.classList.add('mother-tx-modal-shell');
 }
 
-function showAllEventsCalendarModal(events: CalendarEvent[]): void {
+function showAllEventsCalendarModal(initialEvents: CalendarEvent[]): void {
   let viewMode: CalendarViewMode = getCalendarViewMode();
+  let events = initialEvents;
   const body = el('div', { className: 'mother-calendar-modal modal-body' });
   const header = el('div', { className: 'mother-calendar-modal-header' });
   const headerMeta = el('div', { className: 'mother-calendar-modal-header-meta' });
-  headerMeta.append(
-    el('p', { className: 'app-calendar-subtitle' }, formatCalendarEventCountSummary(events)),
-    renderCalendarLastSyncedMeta(events)
-  );
   const headerActions = el('div', { className: 'mother-calendar-modal-header-actions' });
   const viewHost = el('div', {});
   const contentHost = el('div', {});
+  const contentScroll = el('div', { className: 'mother-calendar-modal-scroll' });
+
+  const refreshEvents = async () => {
+    events = await api.getCalendarEvents(new Date().toISOString());
+    renderView();
+    updateHeaderMeta();
+  };
+
+  const updateHeaderMeta = () => {
+    headerMeta.replaceChildren(
+      el('p', { className: 'app-calendar-subtitle' }, formatCalendarEventCountSummary(events))
+    );
+    const modal = body.closest('.modal');
+    const syncedMeta = modal?.querySelector('.calendar-last-synced');
+    if (syncedMeta) {
+      syncedMeta.textContent = formatCalendarLastSynced(getLatestCalendarSyncAt(events));
+    }
+  };
+
+  const calendarOptions = {
+    canModifyEvent: isMomOwnedCalendarEvent,
+    onEdit: async (event: CalendarEvent) => {
+      await openEventEditorModal(event, async () => {
+        showToast('Event updated', 'success');
+        await refreshEvents();
+      }, {
+        showDelete: true,
+        onDelete: async () => {
+          if (!await confirmDialog('Delete this event?')) return;
+          await api.deleteCalendarEvent(event.id);
+          showToast('Event deleted', 'success');
+          await refreshEvents();
+        },
+      });
+    },
+    onDelete: async (event: CalendarEvent) => {
+      if (!await confirmDialog('Delete this event?')) return;
+      await api.deleteCalendarEvent(event.id);
+      showToast('Event deleted', 'success');
+      await refreshEvents();
+    },
+  };
 
   const renderView = () => {
     viewHost.replaceChildren(renderCalendarViewToggle(viewMode, (mode) => {
@@ -795,17 +834,23 @@ function showAllEventsCalendarModal(events: CalendarEvent[]): void {
     }
     contentHost.append(
       viewMode === 'grid'
-        ? renderCalendarGridView(events, { showToolbar: false })
-        : renderCalendarListView(events)
+        ? renderCalendarGridView(events, { showToolbar: false, ...calendarOptions })
+        : renderCalendarListView(events, calendarOptions)
     );
   };
 
+  headerMeta.append(
+    el('p', { className: 'app-calendar-subtitle' }, formatCalendarEventCountSummary(events))
+  );
   header.append(headerMeta, headerActions);
   headerActions.append(viewHost);
-  body.append(header, contentHost);
+  contentScroll.append(contentHost);
+  body.append(header, contentScroll);
   renderView();
 
-  showModal('All Upcoming Events', body);
+  showModal('All Upcoming Events', body, undefined, {
+    headerMeta: renderCalendarLastSyncedMeta(events),
+  });
   body.closest('.modal')?.classList.add('mother-calendar-modal-shell');
 }
 

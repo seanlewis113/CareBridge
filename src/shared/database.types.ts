@@ -56,6 +56,7 @@ export interface Database {
           end_at: string;
           description: string | null;
           created_by: string | null;
+          created_by_persona: string | null;
           synced_at: string | null;
           created_at: string;
         };
@@ -67,6 +68,7 @@ export interface Database {
           end_at: string;
           description?: string | null;
           created_by?: string | null;
+          created_by_persona?: string | null;
           synced_at?: string | null;
           created_at?: string;
         };

@@ -1,9 +1,10 @@
 import type { CalendarEvent } from './types';
-import { el, formatDate, formatTime } from './utils';
+import { el, formatDate } from './utils';
 import { icon, type IconName } from './icons';
 import {
   formatCalendarEventCountSummary,
   formatCalendarLastSynced,
+  formatEventTime,
   formatEventSyncedLabel,
   formatEventSyncedTitle,
   getEventDateSpan,
@@ -46,6 +47,7 @@ export function setCalendarViewMode(mode: CalendarViewMode): void {
 export interface CalendarListOptions {
   onDelete?: (event: CalendarEvent) => void | Promise<void>;
   onEdit?: (event: CalendarEvent) => void | Promise<void>;
+  canModifyEvent?: (event: CalendarEvent) => boolean;
   showGoogleBadge?: boolean;
   wrapInCard?: boolean;
 }
@@ -55,6 +57,7 @@ export interface CalendarGridOptions {
   showLastSynced?: boolean;
   scrollable?: boolean;
   onEdit?: (event: CalendarEvent) => void | Promise<void>;
+  canModifyEvent?: (event: CalendarEvent) => boolean;
 }
 
 export function renderCalendarLastSyncedMeta(events: CalendarEvent[]): HTMLElement {
@@ -80,7 +83,9 @@ export function scrollCalendarToToday(container: HTMLElement): void {
   const todayEl = container.querySelector('.app-calendar-day--today');
   if (!todayEl) return;
 
-  const scrollContainer = container.querySelector('.calendar-page-grid-scroll');
+  const scrollContainer =
+    container.closest('.mother-calendar-modal-scroll') ??
+    container.querySelector('.calendar-page-grid-scroll');
   if (scrollContainer instanceof HTMLElement) {
     const todayRect = todayEl.getBoundingClientRect();
     const scrollRect = scrollContainer.getBoundingClientRect();
@@ -182,7 +187,7 @@ export function renderCalendarListView(events: CalendarEvent[], options: Calenda
       const syncedLabel = formatEventSyncedLabel(event);
       const details = el('div', { className: 'calendar-list-item-details' },
         el('div', { className: 'calendar-list-item-main' },
-          el('strong', {}, formatTime(event.start_at)),
+          el('strong', {}, formatEventTime(event)),
           ' — ',
           event.title,
           options.showGoogleBadge && event.google_event_id
@@ -197,7 +202,7 @@ export function renderCalendarListView(events: CalendarEvent[], options: Calenda
       const rowChildren: (HTMLElement | null)[] = [details];
       const actions = el('div', { className: 'calendar-list-item-actions' });
 
-      if (options.onEdit) {
+      if (options.onEdit && (!options.canModifyEvent || options.canModifyEvent(event))) {
         const editBtn = el('button', {
           className: 'btn btn-secondary',
           type: 'button',
@@ -207,7 +212,7 @@ export function renderCalendarListView(events: CalendarEvent[], options: Calenda
         actions.append(editBtn);
       }
 
-      if (options.onDelete) {
+      if (options.onDelete && (!options.canModifyEvent || options.canModifyEvent(event))) {
         const deleteBtn = el('button', {
           className: 'btn btn-danger',
           type: 'button',
@@ -238,7 +243,7 @@ export function renderDashboardScheduleEventRow(event: CalendarEvent): HTMLEleme
     titleCell.append(el('span', { className: 'calendar-event-synced' }, syncedLabel));
   }
   return el('div', { className: 'caregiver-dash-row caregiver-dash-row--schedule' },
-    el('span', { className: 'caregiver-dash-time' }, formatTime(event.start_at)),
+    el('span', { className: 'caregiver-dash-time' }, formatEventTime(event)),
     titleCell
   );
 }
@@ -397,7 +402,8 @@ function getEventToneClass(seed: string | number): string {
 function renderGridDayEvent(event: CalendarEvent, options: CalendarGridOptions): HTMLElement {
   const toneClass = getEventToneClass(event.id);
   const eventTitle = formatEventSyncedTitle(event);
-  const eventNode = options.onEdit
+  const canEdit = options.onEdit && (!options.canModifyEvent || options.canModifyEvent(event));
+  const eventNode = canEdit
     ? el('button', {
       type: 'button',
       className: `app-calendar-day-event app-calendar-day-event--clickable ${toneClass}`,
@@ -413,7 +419,7 @@ function renderGridDayEvent(event: CalendarEvent, options: CalendarGridOptions):
       el('span', { className: 'app-calendar-day-event-title' }, event.title)
     );
 
-  if (options.onEdit) {
+  if (canEdit) {
     eventNode.addEventListener('click', () => void options.onEdit!(event));
   }
 
@@ -421,16 +427,17 @@ function renderGridDayEvent(event: CalendarEvent, options: CalendarGridOptions):
 }
 
 function renderWeekSpanEvent(segment: WeekSegment, options: CalendarGridOptions): HTMLElement {
+  const canEdit = options.onEdit && (!options.canModifyEvent || options.canModifyEvent(segment.event));
   const classes = [
     'app-calendar-span-event',
     getEventToneClass(segment.lane),
     segment.isStart ? 'app-calendar-span-event--start' : 'app-calendar-span-event--continue',
     segment.isEnd ? 'app-calendar-span-event--end' : 'app-calendar-span-event--extend',
-    options.onEdit ? 'app-calendar-span-event--clickable' : '',
+    canEdit ? 'app-calendar-span-event--clickable' : '',
   ].filter(Boolean).join(' ');
 
   const eventTitle = formatEventSyncedTitle(segment.event);
-  const eventNode = options.onEdit
+  const eventNode = canEdit
     ? el('button', {
       type: 'button',
       className: classes,
@@ -452,7 +459,7 @@ function renderWeekSpanEvent(segment: WeekSegment, options: CalendarGridOptions)
         : null
     );
 
-  if (options.onEdit) {
+  if (canEdit) {
     eventNode.addEventListener('click', () => void options.onEdit!(segment.event));
   }
 

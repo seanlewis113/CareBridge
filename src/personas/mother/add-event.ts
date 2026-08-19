@@ -18,13 +18,15 @@ export interface EventFormOptions {
   event?: CalendarEvent;
   occurrence?: CalendarEvent;
   onSuccess: () => void;
+  onDelete?: () => void | Promise<void>;
+  showDelete?: boolean;
 }
 
 export function renderAddEventForm(onSuccess: () => void): HTMLElement {
   return renderEventForm({ onSuccess });
 }
 
-export function renderEventForm({ event, occurrence, onSuccess }: EventFormOptions): HTMLElement {
+export function renderEventForm({ event, occurrence, onSuccess, onDelete, showDelete }: EventFormOptions): HTMLElement {
   const isEdit = !!event;
   const displayEvent = occurrence ?? event;
   const recurrenceRule = event ? parseRecurringRule(event) : null;
@@ -142,7 +144,17 @@ export function renderEventForm({ event, occurrence, onSuccess }: EventFormOptio
     type: 'submit',
   }, isEdit ? 'Save Changes' : 'Save Event');
 
-  form.append(titleGroup, dateRow, timeGroup, recurrenceGroup, occurrenceGroup, errorEl, submitBtn);
+  const actionRow = el('div', { className: 'modal-actions' }, submitBtn);
+  if (isEdit && showDelete && onDelete) {
+    const deleteBtn = el('button', {
+      className: 'btn btn-danger',
+      type: 'button',
+    }, 'Delete Event');
+    deleteBtn.addEventListener('click', () => void onDelete());
+    actionRow.prepend(deleteBtn);
+  }
+
+  form.append(titleGroup, dateRow, timeGroup, recurrenceGroup, occurrenceGroup, errorEl, actionRow);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -204,7 +216,8 @@ export function renderEventForm({ event, occurrence, onSuccess }: EventFormOptio
 
 export async function openEventEditorModal(
   event: CalendarEvent | undefined,
-  onSuccess: () => void | Promise<void>
+  onSuccess: () => void | Promise<void>,
+  options: Pick<EventFormOptions, 'onDelete' | 'showDelete'> = {}
 ): Promise<void> {
   let source: CalendarEvent | undefined;
   let occurrence: CalendarEvent | undefined;
@@ -228,6 +241,13 @@ export async function openEventEditorModal(
       close();
       void onSuccess();
     },
+    onDelete: options.onDelete
+      ? async () => {
+          await options.onDelete!();
+          close();
+        }
+      : undefined,
+    showDelete: options.showDelete,
   });
   const close = showModal(event ? 'Edit Event' : 'Add Event', form);
 }

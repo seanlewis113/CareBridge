@@ -85,10 +85,21 @@ export function clearElement(element: HTMLElement): void {
   element.replaceChildren();
 }
 
-export function showModal(title: string, content: HTMLElement, onClose?: () => void): () => void {
+export interface ShowModalOptions {
+  headerMeta?: HTMLElement;
+}
+
+export function showModal(
+  title: string,
+  content: HTMLElement,
+  onClose?: () => void,
+  options?: ShowModalOptions
+): () => void {
   const overlay = el('div', { className: 'modal-overlay' });
   const modal = el('div', { className: 'modal', role: 'dialog', 'aria-modal': 'true' });
-  const header = el('div', { className: 'modal-header' }, el('h2', {}, title));
+  const titleGroup = el('div', { className: 'modal-header-title' }, el('h2', {}, title));
+  if (options?.headerMeta) titleGroup.append(options.headerMeta);
+  const header = el('div', { className: 'modal-header' }, titleGroup);
   const closeBtn = el('button', { className: 'modal-close', type: 'button', 'aria-label': 'Close' }, '×');
   header.append(closeBtn);
   modal.append(header, content);

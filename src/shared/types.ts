@@ -17,6 +17,7 @@ export interface CalendarEvent {
   end_at: string;
   description: string | null;
   created_by: string | null;
+  created_by_persona: Persona | null;
   synced_at: string | null;
   created_at: string;
   recurrence_source_id?: string;

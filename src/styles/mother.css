@@ -360,7 +360,8 @@ body:has(.mother-app) {
   padding: 0.2rem 0.55rem;
   border-radius: 999px;
   line-height: 1.35;
-  max-width: min(52%, 14rem);
+  white-space: nowrap;
+  width: fit-content;
 }
 
 .mother-balance-right {
@@ -747,8 +748,16 @@ body:has(.mother-app) {
 /* Mother calendar modal layout — grid/list styles live in calendar.css */
 
 .mother-calendar-modal {
+  display: flex;
+  flex-direction: column;
   padding-top: 0.85rem;
   max-height: min(82dvh, 780px);
+  overflow: hidden;
+}
+
+.mother-calendar-modal-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 

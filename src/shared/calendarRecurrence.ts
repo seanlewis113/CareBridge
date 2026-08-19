@@ -22,7 +22,7 @@ export function isUntimedEvent(event: Pick<CalendarEvent, 'start_at'>): boolean 
 }
 
 export function formatEventTime(event: Pick<CalendarEvent, 'start_at'>): string {
-  return isUntimedEvent(event) ? 'none' : formatTime(event.start_at);
+  return isUntimedEvent(event) ? 'All day' : formatTime(event.start_at);
 }
 
 export function getLatestCalendarSyncAt(events: Iterable<Pick<CalendarEvent, 'synced_at'>>): string | null {

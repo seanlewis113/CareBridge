@@ -27,12 +27,17 @@ serve(async (req) => {
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const body = await req.json();
-    const { action, public_token, account_id } = body;
+    const body = await safeJson(req);
+    const actionFromBody = typeof body.action === 'string' ? body.action : undefined;
+    const actionFromQuery = new URL(req.url).searchParams.get('action') ?? undefined;
+    const action = actionFromBody ?? actionFromQuery;
+    const publicToken = typeof body.public_token === 'string' ? body.public_token : undefined;
+    const accountId = typeof body.account_id === 'string' ? body.account_id : undefined;
+    const cronSecret = req.headers.get('x-cron-secret');
+    const isCron = !!CRON_SECRET && cronSecret === CRON_SECRET;
+    const shouldRefresh = action === 'refresh' || (isCron && !action);
 
-    if (action === 'refresh') {
-      const cronSecret = req.headers.get('x-cron-secret');
-      const isCron = !!CRON_SECRET && cronSecret === CRON_SECRET;
+    if (shouldRefresh) {
 
       if (!isCron) {
         const authError = await requireAdmin(req, supabaseUrl, anonKey, serviceRoleKey);
@@ -45,12 +50,12 @@ serve(async (req) => {
     const authError = await requireAdmin(req, supabaseUrl, anonKey, serviceRoleKey);
     if (authError) return authError;
 
-    if (action === 'exchange' && public_token) {
-      return await handleExchange(adminClient, public_token);
+    if (action === 'exchange' && publicToken) {
+      return await handleExchange(adminClient, publicToken);
     }
 
     if (action === 'link_token') {
-      return await handleLinkToken(account_id);
+      return await handleLinkToken(accountId);
     }
 
     return json({ error: 'Unknown action' }, 400);
@@ -252,6 +257,22 @@ function normalizePlaidCursor(cursor: string | null | undefined): string | null 
   if (!cursor) return null;
   const trimmed = cursor.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+async function safeJson(req: Request): Promise<Record<string, unknown>> {
+  const contentType = req.headers.get('content-type') ?? '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    return {};
+  }
+  try {
+    const parsed = await req.json();
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 function transactionBusinessKey(
