@@ -268,7 +268,6 @@ function initAuthListener(): void {
 async function init(): Promise<void> {
   const app = document.getElementById('app');
   if (!app) return;
-  sessionStorage.removeItem(STALE_RECOVERY_KEY);
 
   initAuthListener();
 
@@ -304,6 +303,9 @@ async function init(): Promise<void> {
   } else {
     await navigate(path || '/');
   }
+
+  // Clear one-time stale recovery lock only after boot succeeds.
+  sessionStorage.removeItem(STALE_RECOVERY_KEY);
 }
 
 init().catch(showBootError);
