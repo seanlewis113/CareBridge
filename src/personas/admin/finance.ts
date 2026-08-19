@@ -2,7 +2,7 @@ import { api, PlaidApiError } from '../../shared/api';
 import { getSession } from '../../shared/auth';
 import { openPlaidLink } from '../../shared/plaidLink';
 import { renderAdminShell } from '../shared/shell';
-import { el, formatCurrency, formatDate, showModal, showToast } from '../../shared/utils';
+import { el, formatCurrency, formatDate, formatDateTime, showModal, showToast } from '../../shared/utils';
 import * as XLSX from 'xlsx';
 import type { FinancialAccount, Transaction } from '../../shared/types';
 import { isHiddenTransaction } from '../../shared/transactionFilters';
@@ -15,8 +15,8 @@ function isChimeAutoSyncEnabled(account: FinancialAccount | undefined): boolean 
 function chimeBalanceMeta(account: FinancialAccount | undefined): string {
   if (!account?.last_synced) return 'Not synced';
   return isChimeAutoSyncEnabled(account)
-    ? `Updated ${formatDate(account.last_synced)}`
-    : `Updated ${formatDate(account.last_synced)} · manual`;
+    ? `Updated ${formatDateTime(account.last_synced)}`
+    : `Updated ${formatDateTime(account.last_synced)} · manual`;
 }
 
 export async function renderAdminFinance(): Promise<void> {
@@ -69,7 +69,7 @@ export async function renderAdminFinance(): Promise<void> {
         style: 'font-size:0.9rem;color:var(--color-text-muted);margin:0 0 1rem',
       },
         chimeAccount?.last_synced
-          ? `Chime is connected. Balance and transactions refresh automatically every 6 hours. Last synced ${formatDate(chimeAccount.last_synced)}.`
+          ? `Chime is connected. Balance and transactions refresh automatically every 6 hours. Last synced ${formatDateTime(chimeAccount.last_synced)}.`
           : 'Chime is connected via Plaid. Balance and transactions will sync on the next refresh.'
       )
     );
