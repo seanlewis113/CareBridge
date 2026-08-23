@@ -1458,6 +1458,27 @@
   grid-template-columns: minmax(0, 1.5fr) 6.75rem 3.75rem 4.25rem;
 }
 
+.caregiver-dash-rx-grid .caregiver-dash-check-row {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) 6.75rem 3.75rem 5.25rem;
+}
+
+.caregiver-dash-rx-grid.caregiver-dash-check-grid--readonly .caregiver-dash-check-row {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) 6.75rem 3.75rem;
+}
+
+.caregiver-dash-rx-col-dosage {
+  text-align: left;
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prescriptions-section {
+  margin-bottom: 1.25rem;
+}
+
 .admin-dash-activity-row {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) 4.5rem 5.5rem;

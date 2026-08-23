@@ -9,6 +9,8 @@ export interface LocalDataStore {
   reminders: import('./types').Reminder[];
   recurring_checks: import('./types').RecurringCheck[];
   recurring_check_completions: import('./types').RecurringCheckCompletion[];
+  prescriptions: import('./types').Prescription[];
+  prescription_doses: import('./types').PrescriptionDose[];
   responsibility_areas: import('./types').ResponsibilityArea[];
   responsibility_assignments: import('./types').ResponsibilityAssignment[];
   visit_notes: import('./types').VisitNote[];
@@ -28,6 +30,7 @@ function defaultStore(): LocalDataStore {
   const dinnerTaskId = crypto.randomUUID();
   const toiletPaperCheckId = crypto.randomUUID();
   const staplesCheckId = crypto.randomUUID();
+  const lisinoprilId = crypto.randomUUID();
   const financesAreaId = crypto.randomUUID();
   const medicalAreaId = crypto.randomUUID();
 
@@ -178,6 +181,31 @@ function defaultStore(): LocalDataStore {
       },
     ],
     recurring_check_completions: [],
+    prescriptions: [
+      {
+        id: lisinoprilId,
+        name: 'Lisinopril',
+        dosage: '10 mg',
+        frequency: 'Once daily in the morning',
+        instructions: 'Take with water. May cause dizziness — sit up slowly.',
+        prescriber: 'Dr. Martinez',
+        active: true,
+        created_by: adminId,
+        created_at: now,
+      },
+      {
+        id: crypto.randomUUID(),
+        name: 'Vitamin D',
+        dosage: '1,000 IU',
+        frequency: 'Once daily with breakfast',
+        instructions: null,
+        prescriber: null,
+        active: true,
+        created_by: adminId,
+        created_at: now,
+      },
+    ],
+    prescription_doses: [],
     responsibility_areas: [
       {
         id: financesAreaId,
@@ -252,6 +280,14 @@ export function loadLocalStore(): LocalDataStore {
       }
       if (!parsed.recurring_check_completions) {
         parsed.recurring_check_completions = [];
+        needsSave = true;
+      }
+      if (!parsed.prescriptions) {
+        parsed.prescriptions = [];
+        needsSave = true;
+      }
+      if (!parsed.prescription_doses) {
+        parsed.prescription_doses = [];
         needsSave = true;
       }
       if (!parsed.responsibility_areas) {

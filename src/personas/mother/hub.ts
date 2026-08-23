@@ -187,7 +187,9 @@ export async function renderMotherHub(): Promise<void> {
   eventsTile.setAttribute('role', 'button');
   eventsTile.setAttribute('tabindex', '0');
   eventsTile.setAttribute('aria-label', 'Open full calendar view');
-  const openCalendarModal = () => showAllEventsCalendarModal(events);
+  const openCalendarModal = () => {
+    void api.getCalendarDisplayEvents().then(showAllEventsCalendarModal);
+  };
   eventsTile.addEventListener('click', openCalendarModal);
   eventsTile.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -782,7 +784,7 @@ function showAllEventsCalendarModal(initialEvents: CalendarEvent[]): void {
   const contentScroll = el('div', { className: 'mother-calendar-modal-scroll' });
 
   const refreshEvents = async () => {
-    events = await api.getCalendarEvents(new Date().toISOString());
+    events = await api.getCalendarDisplayEvents();
     renderView();
     updateHeaderMeta();
   };

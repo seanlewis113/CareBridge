@@ -1,7 +1,7 @@
 import { getSupabase as getSupabaseClient, isSupabaseConfigured } from './supabase';
 import { notifyLocalDataChange } from './realtime';
 import { loadLocalStore, saveLocalStore } from './localStore';
-import { expandRecurringEvents, getSourceEventId } from './calendarRecurrence';
+import { expandRecurringEvents, getCalendarDisplayRange, getSourceEventId } from './calendarRecurrence';
 import type {
   ActivityLog,
   AppSettings,
@@ -17,6 +17,9 @@ import type {
   RecurringCheck,
   RecurringCheckCompletion,
   RecurringCheckWithStatus,
+  Prescription,
+  PrescriptionDose,
+  PrescriptionWithStatus,
   ResponsibilityArea,
   ResponsibilityAssignment,
   MotherHubTask,
@@ -79,6 +82,7 @@ let activityContext: ActivityContext = { profileId: null, persona: null };
 
 let recurringChecksSchemaReady = !isSupabaseConfigured;
 let responsibilitySchemaReady = !isSupabaseConfigured;
+let prescriptionsSchemaReady = !isSupabaseConfigured;
 
 export function isRecurringChecksSchemaReady(): boolean {
   return recurringChecksSchemaReady;
@@ -86,6 +90,10 @@ export function isRecurringChecksSchemaReady(): boolean {
 
 export function isResponsibilitySchemaReady(): boolean {
   return responsibilitySchemaReady;
+}
+
+export function isPrescriptionsSchemaReady(): boolean {
+  return prescriptionsSchemaReady;
 }
 
 function isMissingDbTableError(error: unknown, tableHint?: string): boolean {
@@ -232,6 +240,11 @@ export const api = {
     }
     const events = getLocal('calendar_events');
     return expandRecurringEvents(events, from, to);
+  },
+
+  async getCalendarDisplayEvents(): Promise<CalendarEvent[]> {
+    const { from, to } = getCalendarDisplayRange();
+    return this.getCalendarEvents(from, to);
   },
 
   async getCalendarEvent(id: string): Promise<CalendarEvent | null> {
@@ -932,6 +945,203 @@ export const api = {
     updateLocal('recurring_check_completions', (items) => [completion, ...items]);
     notifyLocalDataChange('recurring_checks');
     return completion;
+  },
+
+  async getPrescriptions(): Promise<Prescription[]> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await db()
+        .from('prescriptions')
+        .select('*')
+        .order('name', { ascending: true });
+      if (error) {
+        if (isMissingDbTableError(error, 'prescription')) {
+          prescriptionsSchemaReady = false;
+          return [];
+        }
+        throw error;
+      }
+      prescriptionsSchemaReady = true;
+      return data as Prescription[];
+    }
+    return getLocal('prescriptions') ?? [];
+  },
+
+  async getPrescriptionsWithStatus(activeOnly = true): Promise<PrescriptionWithStatus[]> {
+    const prescriptions = await this.getPrescriptions();
+    const visible = activeOnly ? prescriptions.filter((p) => p.active) : prescriptions;
+
+    if (isSupabaseConfigured) {
+      if (!prescriptionsSchemaReady) {
+        return visible.map((rx) => ({ ...rx, last_dose: null }));
+      }
+      const { data, error } = await db()
+        .from('prescription_doses')
+        .select('*, administered_by_profile:profiles!administered_by(*)')
+        .order('administered_at', { ascending: false });
+      if (error) {
+        if (isMissingDbTableError(error, 'prescription')) {
+          prescriptionsSchemaReady = false;
+          return visible.map((rx) => ({ ...rx, last_dose: null }));
+        }
+        throw error;
+      }
+      const doses = data as PrescriptionDose[];
+      return visible.map((rx) => {
+        const last = doses.find((d) => d.prescription_id === rx.id);
+        return { ...rx, last_dose: last ?? null };
+      });
+    }
+
+    const doses = getLocal('prescription_doses') ?? [];
+    const profiles = getLocal('profiles');
+    return visible.map((rx) => {
+      const last = doses
+        .filter((d) => d.prescription_id === rx.id)
+        .sort((a, b) => b.administered_at.localeCompare(a.administered_at))[0];
+      return {
+        ...rx,
+        last_dose: last
+          ? {
+              ...last,
+              administered_by_profile: profiles.find((p) => p.id === last.administered_by),
+            }
+          : null,
+      };
+    });
+  },
+
+  async createPrescription(
+    prescription: Omit<Prescription, 'id' | 'created_at'>
+  ): Promise<Prescription> {
+    const newRx: Prescription = {
+      ...prescription,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+    };
+    if (isSupabaseConfigured) {
+      if (!prescriptionsSchemaReady) {
+        throw new Error(
+          'Prescriptions tables are not set up yet. Run supabase/migrations/20260822180000_prescriptions.sql in the Supabase SQL editor.'
+        );
+      }
+      const { data, error } = await db()
+        .from('prescriptions')
+        .insert(newRx)
+        .select()
+        .single();
+      if (error) {
+        if (isMissingDbTableError(error, 'prescription')) {
+          prescriptionsSchemaReady = false;
+          throw new Error(
+            'Prescriptions tables are not set up yet. Run supabase/migrations/20260822180000_prescriptions.sql in the Supabase SQL editor.'
+          );
+        }
+        throw error;
+      }
+      await this.logActivity('prescription.create', {
+        entityType: 'prescription',
+        entityId: (data as Prescription).id,
+        metadata: { name: newRx.name, dosage: newRx.dosage },
+      });
+      return data as Prescription;
+    }
+    updateLocal('prescriptions', (items) => [...items, newRx]);
+    notifyLocalDataChange('prescriptions');
+    return newRx;
+  },
+
+  async updatePrescription(
+    id: string,
+    updates: Partial<Prescription>
+  ): Promise<Prescription> {
+    if (isSupabaseConfigured) {
+      const { data: before, error: beforeError } = await db()
+        .from('prescriptions')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (beforeError) throw beforeError;
+      const { data, error } = await db()
+        .from('prescriptions')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      await this.logActivity('prescription.update', {
+        entityType: 'prescription',
+        entityId: id,
+        metadata: { changes: updates, previous: pickPrevious(before as Prescription, updates) },
+      });
+      return data as Prescription;
+    }
+    let updated!: Prescription;
+    updateLocal('prescriptions', (items) =>
+      items.map((p) => {
+        if (p.id === id) {
+          updated = { ...p, ...updates };
+          return updated;
+        }
+        return p;
+      })
+    );
+    notifyLocalDataChange('prescriptions');
+    return updated;
+  },
+
+  async deletePrescription(id: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { data: snapshot, error: fetchError } = await db()
+        .from('prescriptions')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (fetchError) throw fetchError;
+      const { error } = await db().from('prescriptions').delete().eq('id', id);
+      if (error) throw error;
+      await this.logActivity('prescription.delete', {
+        entityType: 'prescription',
+        entityId: id,
+        metadata: { snapshot, name: (snapshot as Prescription).name },
+      });
+      return;
+    }
+    updateLocal('prescriptions', (items) => items.filter((p) => p.id !== id));
+    updateLocal('prescription_doses', (items) =>
+      items.filter((d) => d.prescription_id !== id)
+    );
+    notifyLocalDataChange('prescriptions');
+  },
+
+  async logPrescriptionDose(
+    prescriptionId: string,
+    profileId: string,
+    notes?: string | null
+  ): Promise<PrescriptionDose> {
+    const dose: PrescriptionDose = {
+      id: crypto.randomUUID(),
+      prescription_id: prescriptionId,
+      administered_by: profileId,
+      administered_at: new Date().toISOString(),
+      notes: notes ?? null,
+    };
+    if (isSupabaseConfigured) {
+      const { data, error } = await db()
+        .from('prescription_doses')
+        .insert(dose)
+        .select('*, administered_by_profile:profiles!administered_by(*)')
+        .single();
+      if (error) throw error;
+      await this.logActivity('prescription.dose', {
+        entityType: 'prescription',
+        entityId: prescriptionId,
+        metadata: { administered_by: profileId },
+      });
+      return data as PrescriptionDose;
+    }
+    updateLocal('prescription_doses', (items) => [dose, ...items]);
+    notifyLocalDataChange('prescriptions');
+    return dose;
   },
 
   async getResponsibilityAreas(): Promise<ResponsibilityArea[]> {

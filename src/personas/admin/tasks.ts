@@ -416,7 +416,12 @@ function createTaskForm(
   const form = el('form', { className: 'modal-body task-form' });
 
   const dueDateValue = existing?.due_at?.slice(0, 10) ?? '';
-  const dueTimeValue = existing?.due_at?.slice(11, 16) ?? '';
+  const dueTimeValue = (() => {
+    if (!existing?.due_at) return '';
+    const d = new Date(existing.due_at);
+    if (d.getHours() === 0 && d.getMinutes() === 0) return '';
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  })();
 
   const optionsGroup = el('div', { className: 'task-form-options' },
     toggleField('Visit-specific task', 'task-visit', existing?.visit_specific ?? false),
@@ -524,11 +529,6 @@ function createTaskForm(
     const dueTime = val('task-due-time');
     const showOnMotherHub = checked('task-mother-hub');    const isOpenSlot = checked('task-open');
 
-    if (dueDate && !dueTime) {
-      errorEl.textContent = 'Please select a due time, or clear the due date.';
-      errorEl.style.display = 'block';
-      return;
-    }
     if (showOnMotherHub && !isOpenSlot && selectedCaregiverIds.size === 0) {      errorEl.textContent = 'Assign this task to someone, mark it as an open slot, or turn off "Show on mother dashboard".';
       errorEl.style.display = 'block';
       return;
@@ -543,8 +543,8 @@ function createTaskForm(
     const taskData = {
       title,
       description: val('task-desc') || null,
-      due_at: dueDate && dueTime
-        ? new Date(`${dueDate}T${dueTime}`).toISOString()
+      due_at: dueDate
+        ? new Date(dueTime ? `${dueDate}T${dueTime}` : `${dueDate}T00:00:00`).toISOString()
         : null,
       visit_specific: checked('task-visit'),
       open_slot: checked('task-open'),

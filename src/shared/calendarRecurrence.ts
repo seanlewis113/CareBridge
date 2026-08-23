@@ -11,7 +11,14 @@ export interface EventRecurrenceRule {
 
 const RECURRENCE_PREFIX = '[[MC_RECURRENCE]]';
 const DEFAULT_RECURRENCE_MONTHS = 18;
+export const CALENDAR_HISTORY_MONTHS = 12;
 const UNTIMED_EVENT_DURATION_MS = 60 * 60 * 1000;
+
+export function getCalendarDisplayRange(now = new Date()): { from: string; to: string } {
+  const from = new Date(now.getFullYear(), now.getMonth() - CALENDAR_HISTORY_MONTHS, now.getDate());
+  const to = new Date(now.getFullYear(), now.getMonth() + DEFAULT_RECURRENCE_MONTHS, now.getDate());
+  return { from: from.toISOString(), to: to.toISOString() };
+}
 
 export function isMidnightTimestamp(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}T00:00:00/.test(value);

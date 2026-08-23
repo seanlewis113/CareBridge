@@ -1,7 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 
-export type DataTopic = 'tasks' | 'task_assignments' | 'mother_hub' | 'recurring_checks' | 'responsibility_areas';
+export type DataTopic = 'tasks' | 'task_assignments' | 'mother_hub' | 'recurring_checks' | 'responsibility_areas' | 'prescriptions';
 
 const localListeners = new Map<DataTopic, Set<() => void>>();
 
@@ -81,6 +81,8 @@ const TASK_TABLES = [
   'recurring_check_completions',
   'responsibility_areas',
   'responsibility_assignments',
+  'prescriptions',
+  'prescription_doses',
 ] as const;
 
 export function subscribeMotherHubChanges(onChange: () => void): () => void {
@@ -101,6 +103,7 @@ export function subscribeTaskChanges(onChange: () => void): () => void {
     subscribeLocal('tasks', debounced),
     subscribeLocal('task_assignments', debounced),
     subscribeLocal('recurring_checks', debounced),
+    subscribeLocal('prescriptions', debounced),
     subscribeLocal('responsibility_areas', debounced),
     subscribePostgresTables('task-changes', TASK_TABLES, onChange),
   ];

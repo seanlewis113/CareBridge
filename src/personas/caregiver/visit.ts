@@ -5,6 +5,7 @@ import { el, todayISO } from '../../shared/utils';
 import { navigate } from '../../shared/router';
 import { ensureTaskRealtime } from '../../shared/realtime';
 import { renderRecurringChecksSection } from './recurringChecks';
+import { renderPrescriptionsSection } from './prescriptions';
 
 export async function renderCaregiverVisitForm(): Promise<void> {
   const session = getSession();
@@ -15,7 +16,8 @@ export async function renderCaregiverVisitForm(): Promise<void> {
     el('p', { style: 'color:var(--color-text-muted);margin-bottom:1rem' },
       'Document what happened during your visit so the family stays informed.'
     ),
-    await renderRecurringChecksSection(() => renderCaregiverVisitForm())
+    await renderRecurringChecksSection(() => renderCaregiverVisitForm()),
+    await renderPrescriptionsSection(() => renderCaregiverVisitForm(), { compact: true, max: 6 })
   );
 
   const form = el('form', { className: 'card' });

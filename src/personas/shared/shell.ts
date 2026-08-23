@@ -199,6 +199,7 @@ export function renderAdminShell(content: HTMLElement, activePath: string): void
     { path: '/admin/tasks', label: 'Tasks', icon: 'clipboard-list' },
     { path: '/admin/responsibility', label: 'Who\'s Responsible', icon: 'briefcase' },
     { path: '/admin/checks', label: 'Recurring Checks', icon: 'list' },
+    { path: '/admin/prescriptions', label: 'Rx Tracker', icon: 'pill' },
     { path: '/admin/calendar', label: 'Calendar', icon: 'calendar' },
     { path: '/admin/reminders', label: 'Reminders', icon: 'bell' },
     { path: '/admin/visits', label: 'Visit Notes', icon: 'file-text' },
@@ -236,6 +237,7 @@ export function renderCaregiverShell(content: HTMLElement, activePath: string): 
     { path: '/caregiver/calendar', label: 'Calendar', icon: 'calendar' },
     { path: '/caregiver/tasks', label: 'My Tasks', icon: 'clipboard-list' },
     { path: '/caregiver/visit', label: 'Log Visit', icon: 'pen-line' },
+    { path: '/caregiver/prescriptions', label: 'Medications', icon: 'pill' },
     { path: '/caregiver/notes', label: 'Visit History', icon: 'file-text' },
     { path: '/caregiver/documents', label: 'Documents', icon: 'folder' },
   ];

@@ -8,6 +8,7 @@ import { ensureTaskRealtime } from '../../shared/realtime';
 import { taskHasAssignees } from '../../shared/taskAssignments';
 import { renderCaregiverDashTaskPanel, sortCaregiverTasks } from './taskTable';
 import { renderRecurringChecksSection } from './recurringChecks';
+import { renderPrescriptionsSection } from './prescriptions';
 import { renderDashboardScheduleEventRow } from '../../shared/calendarViews';
 import { formatCalendarLastSynced, getLatestCalendarSyncAt } from '../../shared/calendarRecurrence';
 import type { CalendarEvent } from '../../shared/types';
@@ -16,11 +17,12 @@ export async function renderCaregiverToday(): Promise<void> {
   const session = getSession();
   const profileId = session.profile?.id;
 
-  const [events, tasks, assignments, checks] = await Promise.all([
+  const [events, tasks, assignments, checks, prescriptions] = await Promise.all([
     api.getUpcomingEvents(3),
     api.getTasks(),
     api.getTaskAssignments(),
     api.getRecurringChecksWithStatus(),
+    api.getPrescriptionsWithStatus(),
   ]);
 
   const myTaskIds = new Set(
@@ -39,6 +41,7 @@ export async function renderCaregiverToday(): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
   const todayEvents = events.filter((e) => e.start_at.startsWith(today));
   const uncheckedChecks = checks.filter((c) => !c.last_completion).length;
+  const undosedMeds = prescriptions.filter((rx) => !rx.last_dose).length;
 
   const refresh = () => renderCaregiverToday();
 
@@ -60,7 +63,9 @@ export async function renderCaregiverToday(): Promise<void> {
       statCard(String(availableTasks.length), 'Open slots', '/caregiver/tasks', 'users'),
       statCard(String(todayEvents.length), 'Events today', '/caregiver/calendar', 'calendar'),
       statCard(String(checks.length), 'Recurring checks', '/caregiver/visit', 'list',
-        uncheckedChecks > 0 ? `${uncheckedChecks} unchecked` : undefined)
+        uncheckedChecks > 0 ? `${uncheckedChecks} unchecked` : undefined),
+      statCard(String(prescriptions.length), 'Medications', '/caregiver/prescriptions', 'pill',
+        undosedMeds > 0 ? `${undosedMeds} not logged` : undefined)
     ),
     el('div', { className: 'caregiver-dash-grid' },
       renderSchedulePanel(todayEvents),
@@ -75,6 +80,7 @@ export async function renderCaregiverToday(): Promise<void> {
         emptyText: 'All caught up — no tasks assigned.',
       }),
       await renderRecurringChecksSection(refresh, { compact: true, max: 4 }),
+      await renderPrescriptionsSection(refresh, { compact: true, max: 4 }),
       renderCaregiverDashTaskPanel({
         iconName: 'users',
         title: 'Available to Claim',

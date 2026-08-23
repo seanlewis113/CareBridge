@@ -29,7 +29,7 @@ export async function renderCaregiverCalendar(): Promise<void> {
   );
 
   const renderEvents = async () => {
-    const events = await api.getCalendarEvents(new Date().toISOString());
+    const events = await api.getCalendarDisplayEvents();
     eventsContainer.replaceChildren();
 
     viewToggleHost.replaceChildren(renderCalendarViewToggle(viewMode, (mode) => {

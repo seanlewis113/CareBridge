@@ -35,7 +35,7 @@ export async function renderAdminCalendar(): Promise<void> {
   content.append(statusEl, eventsContainer);
 
   const renderEvents = async () => {
-    const events = await api.getCalendarEvents(new Date().toISOString());
+    const events = await api.getCalendarDisplayEvents();
     eventsContainer.replaceChildren();
     statusEl.textContent = formatCalendarLastSynced(getLatestCalendarSyncAt(events));
     statusEl.style.color = 'var(--color-text-muted)';

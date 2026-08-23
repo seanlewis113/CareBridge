@@ -16,6 +16,7 @@ import { renderAdminTasks } from './personas/admin/tasks';
 import { renderAdminCalendar } from './personas/admin/calendar';
 import { renderAdminReminders } from './personas/admin/reminders';
 import { renderAdminChecks } from './personas/admin/checks';
+import { renderAdminPrescriptions } from './personas/admin/prescriptions';
 import { renderAdminResponsibility } from './personas/admin/responsibility';
 import { renderAdminFinance } from './personas/admin/finance';
 import { renderAdminDocuments } from './personas/admin/documents';
@@ -27,6 +28,7 @@ import { renderCaregiverToday } from './personas/caregiver/today';
 import { renderCaregiverCalendar } from './personas/caregiver/calendar';
 import { renderCaregiverTasks } from './personas/caregiver/tasks';
 import { renderCaregiverVisitForm } from './personas/caregiver/visit';
+import { renderCaregiverPrescriptionsPage } from './personas/caregiver/prescriptions';
 import { renderCaregiverNotes } from './personas/caregiver/notes';
 import { renderCaregiverDocuments } from './personas/caregiver/documents';
 import { api } from './shared/api';
@@ -158,6 +160,11 @@ function registerRoutes(): void {
     await renderAdminChecks();
   });
 
+  registerRoute('/admin/prescriptions', async () => {
+    if (!(await guardAdmin())) return;
+    await renderAdminPrescriptions();
+  });
+
   registerRoute('/admin/finance', async () => {
     if (!(await guardAdmin())) return;
     await renderAdminFinance();
@@ -206,6 +213,11 @@ function registerRoutes(): void {
   registerRoute('/caregiver/visit', async () => {
     if (!(await guardCaregiver())) return;
     await renderCaregiverVisitForm();
+  });
+
+  registerRoute('/caregiver/prescriptions', async () => {
+    if (!(await guardCaregiver())) return;
+    await renderCaregiverPrescriptionsPage();
   });
 
   registerRoute('/caregiver/notes', async () => {
