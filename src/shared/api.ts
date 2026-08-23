@@ -265,6 +265,7 @@ export const api = {
     const createdByPersona = resolveCalendarEventPersona(event.created_by_persona);
     const newEvent: CalendarEvent = {
       ...event,
+      created_by: event.created_by ?? activityContext.profileId,
       created_by_persona: createdByPersona,
       id: crypto.randomUUID(),
       synced_at: null,
@@ -276,7 +277,11 @@ export const api = {
       if (error) throw error;
       const created = data as CalendarEvent;
       if (!isMomOwnedCalendarEvent(created)) {
-        await this.syncEventToGoogle(created);
+        try {
+          await this.syncEventToGoogle(created);
+        } catch (syncErr) {
+          console.warn('Google Calendar sync failed after creating event:', syncErr);
+        }
       }
       await this.logActivity('calendar.create', {
         entityType: 'calendar_event',
@@ -307,7 +312,11 @@ export const api = {
       if (error) throw error;
       const updated = data as CalendarEvent;
       if (!isMomOwnedCalendarEvent(updated)) {
-        await this.syncEventToGoogle(updated);
+        try {
+          await this.syncEventToGoogle(updated);
+        } catch (syncErr) {
+          console.warn('Google Calendar sync failed after updating event:', syncErr);
+        }
       }
       await this.logActivity('calendar.update', {
         entityType: 'calendar_event',
@@ -408,9 +417,12 @@ export const api = {
 
   async syncEventToGoogle(event: CalendarEvent): Promise<void> {
     if (!isSupabaseConfigured) return;
-    await db().functions.invoke('google-calendar-sync', {
+    const { data, error } = await db().functions.invoke('google-calendar-sync', {
       body: { action: 'push', event },
     });
+    const payload = (data ?? {}) as { error?: string };
+    if (payload.error) throw new Error(payload.error);
+    if (error) throw error;
   },
 
   async getTasks(): Promise<Task[]> {

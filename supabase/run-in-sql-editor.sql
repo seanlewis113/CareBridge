@@ -329,13 +329,27 @@ $$;
 
 GRANT EXECUTE ON FUNCTION get_mother_hub_settings TO anon, authenticated;
 
+ALTER TABLE calendar_events
+  ADD COLUMN IF NOT EXISTS created_by_persona TEXT;
+
 DROP POLICY IF EXISTS calendar_select_anon ON calendar_events;
 CREATE POLICY calendar_select_anon ON calendar_events
   FOR SELECT TO anon USING (true);
 
 DROP POLICY IF EXISTS calendar_insert_anon ON calendar_events;
 CREATE POLICY calendar_insert_anon ON calendar_events
-  FOR INSERT TO anon WITH CHECK (true);
+  FOR INSERT TO anon WITH CHECK (created_by_persona = 'mother');
+
+DROP POLICY IF EXISTS calendar_update_anon ON calendar_events;
+CREATE POLICY calendar_update_anon ON calendar_events
+  FOR UPDATE TO anon
+  USING (created_by_persona = 'mother')
+  WITH CHECK (created_by_persona = 'mother');
+
+DROP POLICY IF EXISTS calendar_delete_anon ON calendar_events;
+CREATE POLICY calendar_delete_anon ON calendar_events
+  FOR DELETE TO anon
+  USING (created_by_persona = 'mother');
 
 DROP POLICY IF EXISTS reminders_select_anon ON reminders;
 CREATE POLICY reminders_select_anon ON reminders

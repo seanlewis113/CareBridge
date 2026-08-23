@@ -141,12 +141,20 @@ serve(async (req) => {
 
     if (action === 'push' && event) {
       const calendarId = settings.google_calendar_id ?? 'primary';
-      const body = {
-        summary: event.title,
-        description: event.description,
-        start: { dateTime: event.start_at, timeZone: 'America/Los_Angeles' },
-        end: { dateTime: event.end_at, timeZone: 'America/Los_Angeles' },
-      };
+      const allDay = isAllDayCalendarEvent(event);
+      const body = allDay
+        ? {
+            summary: event.title,
+            description: event.description,
+            start: { date: event.start_at.slice(0, 10) },
+            end: { date: event.end_at.slice(0, 10) },
+          }
+        : {
+            summary: event.title,
+            description: event.description,
+            start: { dateTime: event.start_at, timeZone: 'America/Los_Angeles' },
+            end: { dateTime: event.end_at, timeZone: 'America/Los_Angeles' },
+          };
       const calRes = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
         {
@@ -156,6 +164,9 @@ serve(async (req) => {
         }
       );
       const created = await calRes.json();
+      if (!calRes.ok) {
+        return json({ error: created.error?.message ?? 'Failed to create Google Calendar event' }, 400);
+      }
       await supabase
         .from('calendar_events')
         .update({ google_event_id: created.id, synced_at: new Date().toISOString() })
@@ -222,6 +233,18 @@ function json(data: unknown, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
   });
+}
+
+function isAllDayCalendarEvent(event: { start_at: string; end_at: string }): boolean {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(event.start_at)) return true;
+  if (!/^\d{4}-\d{2}-\d{2}T00:00:00/.test(event.start_at)) return false;
+  const startDay = event.start_at.slice(0, 10);
+  const endDay = event.end_at.slice(0, 10);
+  if (endDay === startDay) return true;
+  const nextDay = new Date(`${startDay}T12:00:00`);
+  nextDay.setDate(nextDay.getDate() + 1);
+  const nextDayKey = nextDay.toISOString().slice(0, 10);
+  return endDay === nextDayKey && /^\d{4}-\d{2}-\d{2}T00:00:00/.test(event.end_at);
 }
 
 interface GoogleEvent {

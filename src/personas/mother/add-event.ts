@@ -12,7 +12,7 @@ import {
 } from '../../shared/calendarRecurrence';
 import { createClockPickerField } from '../../shared/clock-picker';
 import type { CalendarEvent } from '../../shared/types';
-import { el, showModal, todayISO } from '../../shared/utils';
+import { el, formatAppError, showModal, todayISO } from '../../shared/utils';
 
 export interface EventFormOptions {
   event?: CalendarEvent;
@@ -161,7 +161,8 @@ export function renderEventForm({ event, occurrence, onSuccess, onDelete, showDe
     const title = (form.querySelector('#event-title') as HTMLInputElement).value.trim();
     const startDateValue = startDateInput.value;
     const endDateValue = endDateInput.value;
-    const time = timePicker.getValue().trim();
+    const rawTime = timePicker.getValue().trim();
+    const time = rawTime === '00:00' ? '' : rawTime;
     const recurrenceValue = recurrenceSelect.value;
     const noEndDate = noEndDateCheckbox.checked;
     const recurrenceCount = Math.max(2, Math.min(365, Number.parseInt(occurrenceInput.value || '26', 10) || 26));
@@ -206,7 +207,7 @@ export function renderEventForm({ event, occurrence, onSuccess, onDelete, showDe
       }
       onSuccess();
     } catch (err) {
-      errorEl.textContent = err instanceof Error ? err.message : 'Could not save event';
+      errorEl.textContent = formatAppError(err, 'Could not save event');
       errorEl.style.display = 'block';
     }
   });

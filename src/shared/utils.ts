@@ -1,3 +1,13 @@
+export function formatAppError(err: unknown, fallback = 'Something went wrong'): string {
+  if (err instanceof Error && err.message.trim()) return err.message;
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    const message = (err as { message: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  if (typeof err === 'string' && err.trim()) return err;
+  return fallback;
+}
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 }
