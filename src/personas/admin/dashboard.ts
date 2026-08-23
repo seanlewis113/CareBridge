@@ -9,7 +9,6 @@ import { renderRecurringChecksSection } from '../caregiver/recurringChecks';
 import { formatAction, formatActor, formatDetails } from './activity';
 import { isRevertible } from '../../shared/revertActivity';
 import { renderDashboardScheduleEventRow } from '../../shared/calendarViews';
-import { formatCalendarLastSynced, getLatestCalendarSyncAt } from '../../shared/calendarRecurrence';
 import type { ActivityLog, CalendarEvent, Task } from '../../shared/types';
 
 export async function renderAdminDashboard(): Promise<void> {
@@ -142,11 +141,6 @@ function renderSchedulePanel(events: CalendarEvent[]): HTMLElement {
   viewAll.addEventListener('click', () => navigate('/admin/calendar'));
   head.append(viewAll);
   panel.append(head);
-  panel.append(
-    el('p', { className: 'calendar-last-synced calendar-last-synced--panel' },
-      formatCalendarLastSynced(getLatestCalendarSyncAt(events))
-    )
-  );
 
   if (events.length === 0) {
     panel.append(el('p', { className: 'caregiver-dash-empty' }, 'No events scheduled today.'));

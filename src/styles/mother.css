@@ -122,7 +122,7 @@ body:has(.mother-app) {
   box-shadow: var(--shadow-fab);
 }
 
-/* Grid: balance + responsible + events left (equal height), help + remember right */
+/* Grid: balance + responsible + events left, remember right */
 .mother-content {
   flex: 1;
   min-height: 0;
@@ -137,8 +137,7 @@ body:has(.mother-app) {
 .mother-q-tl { grid-column: 1; grid-row: 1 / span 2; }
 .mother-q-responsible { grid-column: 1; grid-row: 3 / span 2; }
 .mother-q-ml { grid-column: 1; grid-row: 5 / span 2; }
-.mother-q-mr { grid-column: 2; grid-row: 1 / span 3; }
-.mother-q-br { grid-column: 2; grid-row: 4 / span 3; }
+.mother-q-br { grid-column: 2; grid-row: 1 / span 6; }
 
 /* Infographic tiles — color-coded themes */
 .mother-tile {
@@ -194,11 +193,6 @@ body:has(.mother-app) {
   border-top: 4px solid #2980b9;
 }
 
-.mother-tile--help {
-  background: linear-gradient(145deg, #ffffff 0%, #f3e8f8 100%);
-  border-top: 4px solid var(--color-accent-purple);
-}
-
 .mother-tile--remember {
   background: linear-gradient(145deg, #ffffff 0%, var(--color-warning-light) 100%);
   border-top: 4px solid var(--color-warning);
@@ -240,11 +234,6 @@ body:has(.mother-app) {
 
 .mother-tile--responsible .mother-tile-icon {
   background: #2980b9;
-  color: white;
-}
-
-.mother-tile--help .mother-tile-icon {
-  background: var(--color-accent-purple);
   color: white;
 }
 
@@ -811,37 +800,6 @@ body:has(.mother-app) {
   color: var(--color-warning);
 }
 
-/* Who helps */
-.mother-help-list {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  overflow: hidden;
-}
-
-.mother-help-list .card-table-header .card-table-row {
-  padding-top: 0;
-}
-
-.mother-help-item {
-  padding: 0;
-  background: transparent;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.mother-help-list .card-table-row--help {
-  padding: clamp(0.25rem, 0.6vh, 0.35rem) 0;
-  border-bottom: 1px solid rgba(44, 36, 22, 0.08);
-}
-
-.mother-help-row {
-  display: flex;
-  align-items: center;
-  gap: clamp(0.5rem, 1.2vw, 0.75rem);
-}
-
 .mother-avatar {
   flex-shrink: 0;
   width: clamp(1.85rem, 4.5vh, 2.25rem);
@@ -860,42 +818,6 @@ body:has(.mother-app) {
 .mother-avatar--open {
   background: var(--color-warning);
   box-shadow: 0 2px 6px rgba(243, 156, 18, 0.35);
-}
-
-.mother-help-content {
-  min-width: 0;
-  flex: 1;
-}
-
-.mother-help-who {
-  font-weight: 800;
-  font-size: clamp(0.85rem, 2.2vh, 1rem);
-  line-height: 1.2;
-  color: var(--color-accent-purple);
-  min-width: 0;
-}
-
-.mother-help-who--open {
-  color: var(--color-warning);
-}
-
-.mother-help-what {
-  font-size: clamp(0.82rem, 2vh, 0.95rem);
-  font-weight: 600;
-  line-height: 1.2;
-  color: var(--color-text);
-  min-width: 0;
-}
-
-.mother-help-when {
-  font-size: clamp(0.72rem, 1.6vh, 0.82rem);
-  color: var(--color-text-muted);
-  font-weight: 700;
-  background: #f3e8f8;
-  padding: 0.1rem 0.4rem;
-  border-radius: 999px;
-  white-space: nowrap;
-  justify-self: end;
 }
 
 /* Reminders */

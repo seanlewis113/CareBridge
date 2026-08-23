@@ -52,13 +52,12 @@ export async function renderMotherHub(): Promise<void> {
   layout.append(skeleton);
   app.replaceChildren(layout);
 
-  const [settings, events, reminders, accounts, helpTasks, responsibilityAreas, profiles, responsibilityAssignments, hubTransactions] =
+  const [settings, events, reminders, accounts, responsibilityAreas, profiles, responsibilityAssignments, hubTransactions] =
     await Promise.all([
       api.getSettings(),
       api.getCalendarEvents(nowIso),
       api.getReminders(),
       api.getFinancialAccounts(),
-      api.getMotherHubTasks(),
       api.getResponsibilityAreas(),
       api.getProfiles(),
       api.getResponsibilityAssignments(),
@@ -245,47 +244,6 @@ export async function renderMotherHub(): Promise<void> {
     responsibleBody.append(list);
   }
 
-  const helpBody = el('div', { className: 'mother-tile-body' });
-  const helpTile = el('section', { className: 'mother-tile mother-tile--help mother-q-mr', 'aria-label': 'Who helps with what' },
-    createTileHeader('users', 'Who helps you with what'),
-    helpBody
-  );
-
-  const displayTasks = helpTasks.slice(0, 4);
-  if (displayTasks.length === 0) {
-    helpBody.append(el('p', { className: 'mother-empty-hint' }, 'No help scheduled yet.'));
-  } else {
-    const list = el('div', { className: 'mother-help-list card-table' },
-      el('div', { className: 'card-table-header' },
-        el('div', { className: 'card-table-row card-table-row--help' },
-          el('span', {}, ''),
-          el('span', {}, 'Who'),
-          el('span', {}, 'Task'),
-          el('span', {}, 'When')
-        )
-      ),
-      el('div', { className: 'card-table-body' })
-    );
-    const body = list.querySelector('.card-table-body')!;
-    for (const task of displayTasks) {
-      const helper = task.helper_name ?? (task.open_slot ? 'Looking for help' : '—');
-      const isOpen = helper === 'Looking for help';
-      body.append(
-        el('div', { className: 'mother-help-item card-table-row card-table-row--help' },
-          el('div', { className: `mother-avatar${isOpen ? ' mother-avatar--open' : ''}` },
-            isOpen ? '?' : getInitials(helper)
-          ),
-          el('span', { className: `mother-help-who${isOpen ? ' mother-help-who--open' : ''}` }, helper),
-          el('span', { className: 'mother-help-what' }, task.title),
-          task.due_at
-            ? el('span', { className: 'mother-help-when' }, formatDate(task.due_at))
-            : el('span', { className: 'mother-help-when card-table-muted' }, '—')
-        )
-      );
-    }
-    helpBody.append(list);
-  }
-
   const remindersBody = el('div', { className: 'mother-tile-body' });
   const remindersTile = el('section', { className: 'mother-tile mother-tile--remember mother-q-br', 'aria-label': 'Things to remember' },
     createTileHeader('bell', 'Things to Remember'),
@@ -308,7 +266,7 @@ export async function renderMotherHub(): Promise<void> {
     remindersBody.append(list);
   }
 
-  content.append(balanceTile, responsibleTile, eventsTile, helpTile, remindersTile);
+  content.append(balanceTile, responsibleTile, eventsTile, remindersTile);
 
   layout.append(header, content);
   app.replaceChildren(layout);

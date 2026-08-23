@@ -529,7 +529,7 @@ button, input, select, textarea {
 }
 
 .card-table-row--help {
-  grid-template-columns: 2.25rem 1fr 1.35fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) auto;
 }
 
 .card-table-row--responsible {
