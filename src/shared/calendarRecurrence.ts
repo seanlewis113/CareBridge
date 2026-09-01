@@ -241,17 +241,44 @@ export function formatCalendarEventCountSummary(events: CalendarEvent[]): string
   return parts.join(' · ');
 }
 
+/** Stable key for matching the same calendar occurrence across app expansion and Google sync rows. */
+function buildOccurrenceKey(title: string, startAt: string): string {
+  const normalizedTitle = title.trim().toLowerCase();
+  const startPart = isUntimedEvent({ start_at: startAt })
+    ? startAt.slice(0, 10)
+    : new Date(startAt).toISOString();
+  return `${normalizedTitle}|${startPart}`;
+}
+
 export function expandRecurringEvents(events: CalendarEvent[], from?: string, to?: string): CalendarEvent[] {
   const fromDate = from ? new Date(from) : new Date();
   const toDate = to ? new Date(to) : new Date(fromDate.getFullYear(), fromDate.getMonth() + DEFAULT_RECURRENCE_MONTHS, fromDate.getDate());
   const expanded: CalendarEvent[] = [];
+  const occurrenceIndex = new Map<string, number>();
+
+  const addConcreteEvent = (event: CalendarEvent) => {
+    const key = buildOccurrenceKey(event.title, event.start_at);
+    const existingIdx = occurrenceIndex.get(key);
+    if (existingIdx !== undefined) {
+      const existing = expanded[existingIdx];
+      if (!existing.google_event_id && event.google_event_id) {
+        expanded[existingIdx] = event;
+      }
+      return;
+    }
+    occurrenceIndex.set(key, expanded.length);
+    expanded.push(event);
+  };
+
+  for (const event of events) {
+    if (parseRecurringRule(event)) continue;
+    if (!isWithinRange(parseEventInstant(event.start_at), fromDate, toDate)) continue;
+    addConcreteEvent(event);
+  }
 
   for (const event of events) {
     const rule = parseRecurringRule(event);
-    if (!rule) {
-      if (isWithinRange(parseEventInstant(event.start_at), fromDate, toDate)) expanded.push(event);
-      continue;
-    }
+    if (!rule) continue;
 
     const startSeed = parseEventInstant(event.start_at);
     const durationMs = isUntimedEvent(event)
@@ -263,12 +290,16 @@ export function expandRecurringEvents(events: CalendarEvent[], from?: string, to
       if (occurrenceStart > toDate) break;
       if (occurrenceStart < fromDate) continue;
       const occurrenceEnd = new Date(occurrenceStart.getTime() + durationMs);
+      const startAt = toIsoLocalSeconds(occurrenceStart);
+      const key = buildOccurrenceKey(event.title, startAt);
+      if (occurrenceIndex.has(key)) continue;
+      occurrenceIndex.set(key, expanded.length);
       expanded.push({
         ...event,
         id: i === 0 ? event.id : `${event.id}::${i}`,
         recurrence_source_id: event.id,
         recurrence_index: i,
-        start_at: toIsoLocalSeconds(occurrenceStart),
+        start_at: startAt,
         end_at: toIsoLocalSeconds(occurrenceEnd),
       });
     }
