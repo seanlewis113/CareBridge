@@ -174,14 +174,21 @@ export async function renderAdminFinance(): Promise<void> {
     btn.disabled = true;
     try {
       const { transactionsSynced } = await api.refreshChimeBalance();
-      const txTotal = transactionsSynced
-        ? transactionsSynced.added + transactionsSynced.modified + transactionsSynced.removed
+      const synced = transactionsSynced;
+      const txTotal = synced
+        ? synced.added + synced.modified + synced.removed + (synced.upgraded ?? 0)
         : 0;
-      showToast(
-        txTotal > 0
-          ? `Chime updated (${transactionsSynced!.added} new transactions)`
-          : 'Chime balance updated'
-      );
+      let message = 'Chime balance updated';
+      if (txTotal > 0) {
+        const parts: string[] = [];
+        if (synced!.added > 0) parts.push(`${synced!.added} new`);
+        if ((synced!.upgraded ?? 0) > 0) parts.push(`${synced!.upgraded} linked`);
+        if (synced!.modified > 0) parts.push(`${synced!.modified} updated`);
+        message = `Chime updated (${parts.join(', ')})`;
+      } else if (synced?.resynced) {
+        message = 'Chime refreshed — no new transactions found';
+      }
+      showToast(message);
       await renderAdminFinance();
     } catch (err) {
       if (err instanceof PlaidApiError && err.needsRelink) {

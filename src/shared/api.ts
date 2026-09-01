@@ -1545,13 +1545,25 @@ export const api = {
 
   async refreshChimeBalance(): Promise<{
     account: FinancialAccount | null;
-    transactionsSynced?: { added: number; modified: number; removed: number };
+    transactionsSynced?: {
+      added: number;
+      modified: number;
+      removed: number;
+      upgraded?: number;
+      resynced?: boolean;
+    };
   }> {
     if (isSupabaseConfigured) {
       const data = await invokePlaidBalance({ action: 'refresh' });
       await this.logActivity('financial.refresh_balance');
       const transactionsSynced = data?.transactions_synced as
-        | { added: number; modified: number; removed: number }
+        | {
+            added: number;
+            modified: number;
+            removed: number;
+            upgraded?: number;
+            resynced?: boolean;
+          }
         | undefined;
       return {
         account: (data?.account as FinancialAccount | undefined) ?? null,

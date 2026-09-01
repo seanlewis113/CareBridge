@@ -130,6 +130,7 @@ async function handleExchange(
     account_name: chimeAccount?.name ?? 'Spending',
     plaid_item_id: item_id,
     plaid_access_token: access_token,
+    plaid_account_id: chimeAccount?.account_id ?? null,
     last_balance: chimeAccount?.balances?.current ?? null,
     last_synced: new Date().toISOString(),
     display_on_mother_hub: true,
@@ -174,7 +175,10 @@ async function handleExchange(
 
   const { data: syncedAccount, error: syncError } = await supabase
     .from('financial_accounts')
-    .update({ plaid_transactions_cursor: txSync.cursor })
+    .update({
+      plaid_transactions_cursor: txSync.cursor,
+      plaid_account_id: chimeAccount?.account_id ?? null,
+    })
     .eq('id', account.id)
     .select()
     .single();
@@ -196,22 +200,39 @@ async function handleRefresh(supabase: SupabaseClient): Promise<Response> {
   }
 
   const plaidAccounts = await fetchAccountBalances(chime.plaid_access_token);
-  const plaidAccount = selectChimeAccount(plaidAccounts);
+  const plaidAccount = selectChimeAccount(plaidAccounts, chime.plaid_account_id);
   const balance = plaidAccount?.balances?.current ?? chime.last_balance;
+  const plaidAccountId = plaidAccount?.account_id ?? chime.plaid_account_id ?? undefined;
 
-  const txSync = await syncTransactions(
+  let txSync = await syncTransactions(
     supabase,
     chime.id,
     chime.plaid_access_token,
     normalizePlaidCursor(chime.plaid_transactions_cursor),
-    plaidAccount?.account_id
+    plaidAccountId
   );
+
+  const hadCursor = !!normalizePlaidCursor(chime.plaid_transactions_cursor);
+  if (hadCursor && txSync.counts.added === 0 && txSync.counts.modified === 0) {
+    const stale = await isTransactionSyncStale(supabase, chime.id);
+    if (stale) {
+      txSync = await syncTransactions(
+        supabase,
+        chime.id,
+        chime.plaid_access_token,
+        null,
+        plaidAccountId
+      );
+      txSync.counts.resynced = true;
+    }
+  }
 
   const { data: updated, error } = await supabase
     .from('financial_accounts')
     .update({
       last_balance: balance,
       last_synced: new Date().toISOString(),
+      plaid_account_id: plaidAccountId ?? chime.plaid_account_id,
       plaid_transactions_cursor: txSync.cursor,
     })
     .eq('id', chime.id)
@@ -240,17 +261,54 @@ async function fetchAccountBalances(accessToken: string): Promise<PlaidAccount[]
   }
 }
 
-function selectChimeAccount(accounts: PlaidAccount[] | undefined): PlaidAccount | undefined {
+function selectChimeAccount(
+  accounts: PlaidAccount[] | undefined,
+  storedAccountId?: string | null
+): PlaidAccount | undefined {
   if (!accounts?.length) return undefined;
+
+  if (storedAccountId) {
+    const stored = accounts.find((a) => a.account_id === storedAccountId);
+    if (stored) return stored;
+  }
+
+  const spending = accounts.find((a) => {
+    const name = a.name?.toLowerCase() ?? '';
+    return name.includes('spending') ||
+      (name.includes('checking') && !name.includes('credit') && !name.includes('builder'));
+  });
+  if (spending) return spending;
+
   return accounts.find((a) =>
     a.name?.toLowerCase().includes('chime') || a.subtype === 'checking'
   ) ?? accounts[0];
+}
+
+async function isTransactionSyncStale(
+  supabase: SupabaseClient,
+  accountId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('date')
+    .eq('account_id', accountId)
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.date) return false;
+
+  const latest = new Date(`${data.date}T12:00:00Z`).getTime();
+  const daysSince = (Date.now() - latest) / (1000 * 60 * 60 * 24);
+  return daysSince > 7;
 }
 
 interface TransactionSyncCounts {
   added: number;
   modified: number;
   removed: number;
+  upgraded?: number;
+  resynced?: boolean;
 }
 
 function normalizePlaidCursor(cursor: string | null | undefined): string | null {
@@ -342,21 +400,62 @@ async function syncTransactions(
     const { data: existingByKey, error: existingByKeyError } = candidateDates.length > 0
       ? await supabase
         .from('transactions')
-        .select('date, description, amount')
+        .select('id, date, description, amount, import_source, category_override')
         .eq('account_id', accountId)
         .in('date', candidateDates)
       : { data: [], error: null };
     if (existingByKeyError) throw existingByKeyError;
 
-    const knownBusinessKeys = new Set(
-      (existingByKey ?? []).map((row) =>
-        transactionBusinessKey(row.date, row.description, Number(row.amount))
-      )
-    );
+    const existingByBusinessKey = new Map<string, {
+      id: string;
+      import_source: string;
+      category_override: boolean | null;
+    }>();
+    for (const row of existingByKey ?? []) {
+      const key = transactionBusinessKey(row.date, row.description, Number(row.amount));
+      if (!existingByBusinessKey.has(key)) {
+        existingByBusinessKey.set(key, {
+          id: row.id,
+          import_source: row.import_source,
+          category_override: row.category_override,
+        });
+      }
+    }
 
-    const toInsert = candidateRows.filter(
-      (row) => !knownBusinessKeys.has(transactionBusinessKey(row.date, row.description, row.amount))
-    );
+    const toInsert: ReturnType<typeof mapPlaidTransaction>[] = [];
+    for (const row of candidateRows) {
+      const key = transactionBusinessKey(row.date, row.description, row.amount);
+      const existing = existingByBusinessKey.get(key);
+
+      if (!existing) {
+        toInsert.push(row);
+        continue;
+      }
+
+      if (existing.import_source === row.import_source) {
+        continue;
+      }
+
+      if (existing.import_source.startsWith('plaid:')) {
+        const { error: deleteError } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('id', existing.id);
+        if (deleteError) throw deleteError;
+        toInsert.push(row);
+        continue;
+      }
+
+      const upgradePayload = existing.category_override
+        ? { import_source: row.import_source }
+        : { import_source: row.import_source, category: row.category };
+      const { error: upgradeError } = await supabase
+        .from('transactions')
+        .update(upgradePayload)
+        .eq('id', existing.id);
+      if (upgradeError) throw upgradeError;
+      counts.upgraded = (counts.upgraded ?? 0) + 1;
+    }
 
     if (toInsert.length > 0) {
       const { error } = await supabase.from('transactions').insert(toInsert);
