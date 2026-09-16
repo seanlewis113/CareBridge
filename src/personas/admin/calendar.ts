@@ -45,16 +45,20 @@ export async function renderAdminCalendar(): Promise<void> {
       void renderEvents();
     }));
 
+    const deleteEvent = async (event: CalendarEvent) => {
+      if (!await confirmDialog('Delete this event?')) return;
+      await api.deleteCalendarEvent(event.id);
+      await renderEvents();
+    };
+
     const eventActions = {
       onEdit: async (event: CalendarEvent) => {
-        await openEventEditorModal(event, renderEvents);
+        await openEventEditorModal(event, renderEvents, {
+          showDelete: true,
+          onDelete: () => deleteEvent(event),
+        });
       },
-      onDelete: async (event: CalendarEvent) => {
-        if (await confirmDialog('Delete this event?')) {
-          await api.deleteCalendarEvent(event.id);
-          await renderEvents();
-        }
-      },
+      onDelete: deleteEvent,
     };
 
     if (viewMode === 'grid') {

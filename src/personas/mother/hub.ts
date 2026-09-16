@@ -94,12 +94,6 @@ export async function renderMotherHub(): Promise<void> {
     ),
     el('div', { className: 'mother-header-actions' },
       el('button', {
-        className: 'mother-header-btn mother-header-btn--primary',
-        type: 'button',
-        id: 'add-event-btn',
-        'aria-label': 'Add to calendar',
-      }, icon('plus')),
-      el('button', {
         className: 'mother-header-btn',
         type: 'button',
         id: 'switch-user-btn',
@@ -144,7 +138,14 @@ export async function renderMotherHub(): Promise<void> {
   attachMotherBalanceTransactionsModal(balanceTile, chimeTransactions);
 
   const eventsBody = el('div', { className: 'mother-tile-body' });
+  const addEventBtn = el('button', {
+    className: 'mother-events-add-btn mother-header-btn mother-header-btn--primary',
+    type: 'button',
+    id: 'add-event-btn',
+    'aria-label': 'Add to calendar',
+  }, icon('plus'));
   const eventsTile = el('section', { className: 'mother-tile mother-tile--events mother-q-ml', 'aria-label': 'Upcoming events' },
+    addEventBtn,
     el('div', { className: 'mother-tile-header-row' },
       createTileHeader('calendar', 'Upcoming Events'),
       el('p', { className: 'mother-calendar-sync-meta' }, formatCalendarLastSynced(getLatestCalendarSyncAt(events)))
@@ -189,13 +190,18 @@ export async function renderMotherHub(): Promise<void> {
   const openCalendarModal = () => {
     void api.getCalendarDisplayEvents().then(showAllEventsCalendarModal);
   };
-  eventsTile.addEventListener('click', openCalendarModal);
+  eventsTile.addEventListener('click', (event) => {
+    if ((event.target as HTMLElement).closest('#add-event-btn')) return;
+    openCalendarModal();
+  });
   eventsTile.addEventListener('keydown', (event) => {
+    if ((event.target as HTMLElement).closest('#add-event-btn')) return;
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       openCalendarModal();
     }
   });
+  addEventBtn.addEventListener('click', (event) => event.stopPropagation());
 
   const responsibleBody = el('div', { className: 'mother-tile-body' });
   const responsibleTile = el('section', {

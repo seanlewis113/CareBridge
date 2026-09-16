@@ -169,8 +169,23 @@ body:has(.mother-app) {
 }
 
 .mother-tile--events {
+  position: relative;
   background: linear-gradient(145deg, #ffffff 0%, var(--color-primary-light) 55%, #fff8f0 100%);
   border-top: 4px solid var(--color-primary);
+}
+
+.mother-events-add-btn {
+  position: absolute;
+  top: clamp(0.45rem, 1vh, 0.65rem);
+  right: clamp(0.45rem, 1vw, 0.65rem);
+  z-index: 2;
+  width: clamp(2.15rem, 5vh, 2.75rem);
+  height: clamp(2.15rem, 5vh, 2.75rem);
+  box-shadow: var(--shadow-fab);
+}
+
+.mother-tile--events .mother-tile-header-row {
+  padding-right: clamp(2.6rem, 6vh, 3.25rem);
 }
 
 .mother-events-clickable {

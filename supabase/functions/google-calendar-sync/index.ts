@@ -214,6 +214,11 @@ async function fetchGoogleCalendarEvents(
 }
 
 async function getAccessToken(refreshToken: string): Promise<string> {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    throw new Error(
+      'Google OAuth is not configured on the server (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).'
+    );
+  }
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -225,6 +230,14 @@ async function getAccessToken(refreshToken: string): Promise<string> {
     }),
   });
   const data = await res.json();
+  if (!res.ok || !data.access_token) {
+    const detail = data.error_description ?? data.error ?? 'unknown error';
+    const hint =
+      data.error === 'invalid_grant'
+        ? ' Reconnect Google Calendar in Admin → Settings (use Reconnect Google Calendar).'
+        : '';
+    throw new Error(`Could not refresh Google access token: ${detail}.${hint}`);
+  }
   return data.access_token;
 }
 

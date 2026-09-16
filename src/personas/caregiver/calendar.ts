@@ -6,7 +6,7 @@ import {
   renderCalendarViewToggle,
 } from '../../shared/calendarViews';
 import { renderCaregiverShell } from '../shared/shell';
-import { el } from '../../shared/utils';
+import { confirmDialog, el } from '../../shared/utils';
 import { openEventEditorModal } from '../mother/add-event';
 import type { CalendarEvent } from '../../shared/types';
 
@@ -37,16 +37,28 @@ export async function renderCaregiverCalendar(): Promise<void> {
       void renderEvents();
     }));
 
-    const onEdit = async (event: CalendarEvent) => {
-      await openEventEditorModal(event, renderEvents);
+    const deleteEvent = async (event: CalendarEvent) => {
+      if (!await confirmDialog('Delete this event?')) return;
+      await api.deleteCalendarEvent(event.id);
+      await renderEvents();
+    };
+
+    const eventActions = {
+      onEdit: async (event: CalendarEvent) => {
+        await openEventEditorModal(event, renderEvents, {
+          showDelete: true,
+          onDelete: () => deleteEvent(event),
+        });
+      },
+      onDelete: deleteEvent,
     };
 
     if (viewMode === 'grid') {
-      eventsContainer.append(renderCalendarGridView(events, { onEdit }));
+      eventsContainer.append(renderCalendarGridView(events, eventActions));
       return;
     }
 
-    eventsContainer.append(renderCalendarListView(events, { wrapInCard: true, onEdit }));
+    eventsContainer.append(renderCalendarListView(events, { wrapInCard: true, ...eventActions }));
   };
 
   await renderEvents();
