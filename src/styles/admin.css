@@ -605,6 +605,47 @@
 }
 
 @media (max-width: 640px) {
+  .app-content {
+    padding: 1rem 0.85rem 5rem;
+  }
+
+  .app-content > h2:first-child {
+    font-size: 1.25rem;
+  }
+
+  .admin-task-page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+  }
+
+  .admin-task-page-header .btn {
+    width: 100%;
+  }
+
+  .caregiver-dash-header {
+    flex-wrap: wrap;
+  }
+
+  .caregiver-dash-header .btn {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .chart-bar-label {
+    width: 4.5rem;
+    font-size: 0.75rem;
+  }
+
+  .chart-bar-value {
+    width: 3.5rem;
+    font-size: 0.75rem;
+  }
+
+  .task-form-due-row {
+    grid-template-columns: 1fr;
+  }
+
   .admin-task-toolbar {
     flex-direction: column;
     align-items: stretch;

@@ -895,3 +895,127 @@ body:has(.mother-app) {
 .mother-skeleton {
   padding: 1rem;
 }
+
+/* —— Mobile: scrollable single-column hub (desktop keeps infographic grid) —— */
+@media (max-width: 768px) {
+  .mother-app {
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: clip;
+    --text-scale: 1;
+  }
+
+  body:has(.mother-app) {
+    overflow-x: clip;
+    overflow-y: auto;
+  }
+
+  .mother-layout {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .mother-hero {
+    flex-wrap: wrap;
+    padding-top: max(0.45rem, env(safe-area-inset-top));
+  }
+
+  .mother-hero-text {
+    order: 3;
+    flex: 1 1 100%;
+    text-align: center;
+    padding: 0.15rem 0 0.25rem;
+  }
+
+  .mother-hero h1,
+  .mother-hero .date-display {
+    display: block;
+    font-size: 1.15rem;
+  }
+
+  .mother-hero .hero-sep {
+    display: none;
+  }
+
+  .mother-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mother-gap);
+    overflow: visible;
+    padding-bottom: max(var(--mother-gap), env(safe-area-inset-bottom));
+  }
+
+  .mother-q-tl,
+  .mother-q-responsible,
+  .mother-q-ml,
+  .mother-q-br {
+    grid-column: unset;
+    grid-row: unset;
+    order: 0;
+  }
+
+  .mother-q-tl { order: 1; }
+  .mother-q-responsible { order: 2; }
+  .mother-q-br { order: 3; min-height: 14rem; }
+  .mother-q-ml { order: 4; }
+
+  .mother-tile {
+    height: auto;
+    min-height: 0;
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  .mother-tile-body {
+    overflow: visible;
+  }
+
+  .mother-tile--balance {
+    min-height: auto;
+  }
+
+  .mother-balance-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .mother-balance-left .mother-card-slot-wrap {
+    display: none;
+  }
+
+  .mother-balance-right {
+    height: auto;
+  }
+
+  .mother-balance-tx-list,
+  .mother-balance-tx-body {
+    max-height: 12rem;
+    overflow-y: auto;
+  }
+
+  .mother-tile-header-row {
+    flex-wrap: wrap;
+  }
+
+  .mother-calendar-sync-meta {
+    white-space: normal;
+    text-align: left;
+  }
+
+  .mother-events-list,
+  .mother-responsible-list,
+  .mother-reminder-list {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .mother-events-list .card-table-row--events {
+    grid-template-columns: 4.5rem minmax(0, 1fr) minmax(0, 1.5fr);
+    font-size: 0.85rem;
+  }
+
+  .mother-card-crop-form {
+    min-width: 0;
+  }
+}

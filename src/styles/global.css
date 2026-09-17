@@ -50,6 +50,7 @@ body {
   line-height: 1.5;
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
 }
 
 body.modal-open,
@@ -290,6 +291,43 @@ button, input, select, textarea {
 @media (max-width: 640px) {
   .form-row-two {
     grid-template-columns: 1fr;
+  }
+
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal {
+    max-height: 92dvh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+  }
+
+  .card-table-row--events {
+    grid-template-columns: 5rem minmax(0, 1fr) minmax(0, 1.2fr);
+    font-size: 0.82rem;
+  }
+
+  .card-table-row--tx {
+    grid-template-columns: minmax(3.5rem, auto) minmax(0, 1fr) minmax(5rem, 1fr) minmax(3.5rem, auto);
+    font-size: 0.8rem;
+  }
+
+  .card-table-row--activity {
+    min-width: 28rem;
+  }
+
+  .activity-log-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }
 
