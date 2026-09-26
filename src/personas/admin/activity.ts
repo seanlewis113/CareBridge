@@ -10,6 +10,7 @@ const ACTION_LABELS: Record<string, string> = {
   'auth.sign_out': 'Signed out',
   'auth.persona_switch': 'Switched persona',
   'auth.invite_user': 'Invited user',
+  'auth.create_user': 'Added user',
   'auth.password_set': 'Set account password',
   'auth.pin_set': 'Updated PIN',
   'auth.pin_verify': 'Verified PIN',

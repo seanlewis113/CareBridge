@@ -1,5 +1,5 @@
 import { api } from '../../shared/api';
-import { inviteUserByAdmin, getSession, hasSupabaseAuth } from '../../shared/auth';
+import { createUserByAdmin, getSession, hasSupabaseAuth } from '../../shared/auth';
 import { renderAdminShell } from '../shared/shell';
 import { el, showModal } from '../../shared/utils';
 import { PERSONA_LABELS, type Persona, type Profile } from '../../shared/types';
@@ -14,15 +14,17 @@ const MANAGEABLE_PERSONAS: Extract<Persona, 'admin' | 'family_caregiver' | 'hire
 export async function renderAdminUsers(): Promise<void> {
   const content = el('div', {});
 
+  const canManageUsers = isSupabaseConfigured ? await hasSupabaseAuth() : false;
+
   content.append(
     el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem' },
       el('h2', {}, 'Users'),
-      isSupabaseConfigured
+      isSupabaseConfigured && canManageUsers
         ? el('button', { className: 'btn btn-primary', type: 'button', id: 'new-user' }, '+ Add User')
         : null
     ),
     el('p', { style: 'color:var(--color-text-muted);margin-bottom:1.5rem;font-size:0.95rem' },
-      'Add family members and admins. They\'ll get an email with a link to activate their account and choose a password.'
+      'Add family members and admins with an email and password. Share those credentials with them privately — no invitation email is sent.'
     )
   );
 
@@ -32,12 +34,11 @@ export async function renderAdminUsers(): Promise<void> {
     return;
   }
 
-  const canEditRoles = await hasSupabaseAuth();
-  if (!canEditRoles) {
+  if (!canManageUsers) {
     content.append(
       el('div', { className: 'card', style: 'margin-bottom:1rem;border-color:var(--color-warning,#d97706)' },
         el('p', { style: 'margin:0;font-size:0.95rem' },
-          'Sign in with your admin email and password to change user roles. You can still invite new users below.'
+          'Sign in with your admin email and password on the home screen to add users or change roles.'
         )
       )
     );
@@ -50,7 +51,7 @@ export async function renderAdminUsers(): Promise<void> {
     list.append(el('p', { className: 'empty-state' }, 'No users yet. Add your first family member or admin.'));
   } else {
     for (const profile of profiles) {
-      list.append(renderUserCard(profile, canEditRoles, () => renderAdminUsers()));
+      list.append(renderUserCard(profile, canManageUsers, () => renderAdminUsers()));
     }
   }
 
@@ -135,11 +136,32 @@ function createUserForm(onSuccess: () => void): HTMLElement {
         el('option', { value: 'admin' }, 'Admin')
       )
     ),
+    el('div', { className: 'form-group' },
+      el('label', { for: 'user-password' }, 'Password'),
+      el('input', {
+        type: 'password',
+        id: 'user-password',
+        required: 'true',
+        minlength: '8',
+        autocomplete: 'new-password',
+        placeholder: 'At least 8 characters',
+      })
+    ),
+    el('div', { className: 'form-group' },
+      el('label', { for: 'user-password-confirm' }, 'Confirm password'),
+      el('input', {
+        type: 'password',
+        id: 'user-password-confirm',
+        required: 'true',
+        minlength: '8',
+        autocomplete: 'new-password',
+      })
+    ),
     el('p', { style: 'font-size:0.85rem;color:var(--color-text-muted);margin-bottom:0.75rem' },
-      'They\'ll receive an email with a link. After they open it, the app will ask them to set a password for future sign-ins.'
+      'Tell them their email and this password in person, by phone, or another private channel.'
     ),
     el('p', { id: 'user-form-status', style: 'font-size:0.9rem;margin-bottom:0.75rem' }),
-    el('button', { className: 'btn btn-primary', type: 'submit' }, 'Send Invite')
+    el('button', { className: 'btn btn-primary', type: 'submit' }, 'Add User')
   );
 
   form.addEventListener('submit', async (e) => {
@@ -148,20 +170,32 @@ function createUserForm(onSuccess: () => void): HTMLElement {
     const displayName = (form.querySelector('#user-name') as HTMLInputElement).value.trim();
     const email = (form.querySelector('#user-email') as HTMLInputElement).value.trim();
     const persona = (form.querySelector('#user-role') as HTMLSelectElement).value as 'admin' | 'family_caregiver' | 'hired_caregiver';
+    const password = (form.querySelector('#user-password') as HTMLInputElement).value;
+    const confirm = (form.querySelector('#user-password-confirm') as HTMLInputElement).value;
 
     if (!displayName) {
       status.textContent = 'Please enter a display name.';
       status.style.color = 'var(--color-danger)';
       return;
     }
+    if (password.length < 8) {
+      status.textContent = 'Password must be at least 8 characters.';
+      status.style.color = 'var(--color-danger)';
+      return;
+    }
+    if (password !== confirm) {
+      status.textContent = 'Passwords do not match.';
+      status.style.color = 'var(--color-danger)';
+      return;
+    }
 
     try {
-      await inviteUserByAdmin(email, displayName, persona);
-      status.textContent = `Invite sent to ${email}. They should check their inbox.`;
+      await createUserByAdmin(email, password, displayName, persona);
+      status.textContent = `${displayName} was added. Share their email and password securely.`;
       status.style.color = 'var(--color-success)';
-      setTimeout(onSuccess, 1200);
+      setTimeout(onSuccess, 1500);
     } catch (err) {
-      status.textContent = err instanceof Error ? err.message : 'Could not send invite.';
+      status.textContent = err instanceof Error ? err.message : 'Could not add user.';
       status.style.color = 'var(--color-danger)';
     }
   });

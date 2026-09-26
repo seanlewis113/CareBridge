@@ -221,31 +221,61 @@ export async function signUpWithEmail(
   return { needsEmailConfirmation: false };
 }
 
-export async function inviteUserByAdmin(
+export async function createUserByAdmin(
   email: string,
+  password: string,
   displayName: string,
   persona: Extract<Persona, 'family_caregiver' | 'hired_caregiver' | 'admin'>
-): Promise<void> {
+): Promise<Profile> {
   if (!isSupabaseConfigured) {
-    throw new Error('Invites are only available when Supabase is configured.');
+    throw new Error('User management is only available when Supabase is configured.');
+  }
+  if (!(await hasSupabaseAuth())) {
+    throw new Error('Sign in with your admin email and password to add users.');
+  }
+  if (!isAdminProfile()) {
+    throw new Error('Only admins can add users.');
+  }
+  if (password.length < 8) {
+    throw new Error('Password must be at least 8 characters.');
   }
 
-  const { error } = await getSupabase().auth.signInWithOtp({
-    email: email.trim().toLowerCase(),
-    options: {
-      shouldCreateUser: true,
-      emailRedirectTo: window.location.origin,
-      data: {
-        display_name: displayName.trim(),
-        persona,
-        needs_password_setup: true,
-      },
+  const { data, error } = await getSupabase().functions.invoke('create-user', {
+    body: {
+      email: email.trim().toLowerCase(),
+      password,
+      displayName: displayName.trim(),
+      persona,
     },
   });
-  if (error) throw error;
-  await api.logActivity('auth.invite_user', {
+
+  const payload = (data ?? {}) as { error?: string; profile?: Profile };
+  if (payload.error) {
+    throw new Error(payload.error);
+  }
+
+  if (error) {
+    const context = (error as { context?: { json?: () => Promise<{ error?: string }> } }).context;
+    if (context?.json) {
+      try {
+        const errBody = await context.json();
+        if (errBody?.error) throw new Error(errBody.error);
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message !== error.message) throw parseErr;
+      }
+    }
+    throw new Error(error.message ?? 'Could not create user.');
+  }
+
+  if (!payload.profile) {
+    throw new Error('User creation failed.');
+  }
+
+  await api.logActivity('auth.create_user', {
     metadata: { email: email.trim().toLowerCase(), display_name: displayName.trim(), persona },
   });
+
+  return payload.profile;
 }
 
 export async function hasSupabaseAuth(): Promise<boolean> {

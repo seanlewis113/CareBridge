@@ -75,7 +75,7 @@ export async function renderLanding(): Promise<void> {
   if (isSupabaseConfigured) {
     loginCard.append(
       el('p', { className: 'login-card-hint' },
-        'Family admins invite you by email. Open the link they send, set a password once, then sign in here anytime.'
+        'Your family admin creates your account. Sign in with the email and password they gave you.'
       ),
       createEmailLoginForm()
     );
