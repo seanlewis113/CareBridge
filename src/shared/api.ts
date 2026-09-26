@@ -91,9 +91,17 @@ let activityContext: ActivityContext = { profileId: null, persona: null };
 
 let recurringChecksSchemaReady = !isSupabaseConfigured;
 let prescriptionsSchemaReady = !isSupabaseConfigured;
+let motherAlarmsSchemaReady = !isSupabaseConfigured;
+
+const MOTHER_ALARMS_SETUP_MESSAGE =
+  'Mom\'s Alarms table is not set up yet. Run supabase/migrations/20260926150000_mother_alarms.sql in the Supabase SQL editor (or the mother_alarms section in supabase/run-in-sql-editor.sql), then refresh.';
 
 export function isRecurringChecksSchemaReady(): boolean {
   return recurringChecksSchemaReady;
+}
+
+export function isMotherAlarmsSchemaReady(): boolean {
+  return motherAlarmsSchemaReady;
 }
 
 export function isPrescriptionsSchemaReady(): boolean {
@@ -122,7 +130,7 @@ function isMissingDbTableError(error: unknown, tableHint?: string): boolean {
   const e = error as { code?: string; message?: string; details?: string };
   const text = `${e.message ?? ''} ${e.details ?? ''}`.toLowerCase();
   const tableMatch = tableHint
-    ? text.includes(tableHint) && text.includes('does not exist')
+    ? text.includes(tableHint) && (text.includes('does not exist') || text.includes('could not find the table'))
     : text.includes('recurring_check') && text.includes('does not exist');
   return (
     e.code === 'PGRST205' ||
@@ -857,7 +865,14 @@ export const api = {
         .from('mother_alarms')
         .select('*')
         .order('time_of_day', { ascending: true });
-      if (error) throw error;
+      if (error) {
+        if (isMissingDbTableError(error, 'mother_alarm')) {
+          motherAlarmsSchemaReady = false;
+          return [];
+        }
+        throw error;
+      }
+      motherAlarmsSchemaReady = true;
       return (data as MotherAlarm[]).map(normalizeMotherAlarm);
     }
     return getLocal('mother_alarms') ?? [];
@@ -870,8 +885,17 @@ export const api = {
       created_at: new Date().toISOString(),
     };
     if (isSupabaseConfigured) {
+      if (!motherAlarmsSchemaReady) {
+        throw new Error(MOTHER_ALARMS_SETUP_MESSAGE);
+      }
       const { data, error } = await db().from('mother_alarms').insert(newAlarm).select().single();
-      if (error) throw error;
+      if (error) {
+        if (isMissingDbTableError(error, 'mother_alarm')) {
+          motherAlarmsSchemaReady = false;
+          throw new Error(MOTHER_ALARMS_SETUP_MESSAGE);
+        }
+        throw error;
+      }
       await this.logActivity('mother_alarm.create', {
         entityType: 'mother_alarm',
         entityId: (data as MotherAlarm).id,
@@ -886,6 +910,9 @@ export const api = {
 
   async updateMotherAlarm(id: string, updates: Partial<MotherAlarm>): Promise<MotherAlarm> {
     if (isSupabaseConfigured) {
+      if (!motherAlarmsSchemaReady) {
+        throw new Error(MOTHER_ALARMS_SETUP_MESSAGE);
+      }
       const { data: before, error: beforeError } = await db()
         .from('mother_alarms')
         .select('*')
@@ -898,7 +925,13 @@ export const api = {
         .eq('id', id)
         .select()
         .single();
-      if (error) throw error;
+      if (error) {
+        if (isMissingDbTableError(error, 'mother_alarm')) {
+          motherAlarmsSchemaReady = false;
+          throw new Error(MOTHER_ALARMS_SETUP_MESSAGE);
+        }
+        throw error;
+      }
       await this.logActivity('mother_alarm.update', {
         entityType: 'mother_alarm',
         entityId: id,
@@ -922,6 +955,9 @@ export const api = {
 
   async deleteMotherAlarm(id: string): Promise<void> {
     if (isSupabaseConfigured) {
+      if (!motherAlarmsSchemaReady) {
+        throw new Error(MOTHER_ALARMS_SETUP_MESSAGE);
+      }
       const { data: snapshot, error: fetchError } = await db()
         .from('mother_alarms')
         .select('*')
@@ -929,7 +965,13 @@ export const api = {
         .single();
       if (fetchError) throw fetchError;
       const { error } = await db().from('mother_alarms').delete().eq('id', id);
-      if (error) throw error;
+      if (error) {
+        if (isMissingDbTableError(error, 'mother_alarm')) {
+          motherAlarmsSchemaReady = false;
+          throw new Error(MOTHER_ALARMS_SETUP_MESSAGE);
+        }
+        throw error;
+      }
       await this.logActivity('mother_alarm.delete', {
         entityType: 'mother_alarm',
         entityId: id,

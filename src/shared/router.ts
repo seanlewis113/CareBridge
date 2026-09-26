@@ -1,5 +1,6 @@
 import type { Persona } from './types';
 import { clearActivePersona } from './auth';
+import { formatAppError } from './utils';
 
 type RouteHandler = () => void | Promise<void>;
 
@@ -67,7 +68,7 @@ function renderRouteError(path: string, err: unknown): void {
   heading.textContent = 'Something went wrong';
 
   const detail = document.createElement('p');
-  const errorMessage = err instanceof Error ? err.message : String(err);
+  const errorMessage = formatAppError(err, '');
   detail.textContent = errorMessage
     ? `The page could not load: ${errorMessage}`
     : 'The page could not load. You can try again or return to the home screen.';

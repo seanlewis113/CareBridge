@@ -1,4 +1,4 @@
-import { api } from '../../shared/api';
+import { api, isMotherAlarmsSchemaReady } from '../../shared/api';
 import { getSession } from '../../shared/auth';
 import { createClockPickerField } from '../../shared/clock-picker';
 import { formatMotherAlarmSchedule } from '../../shared/motherAlarms';
@@ -19,6 +19,27 @@ const DAY_OPTIONS: { value: MotherAlarmDay; label: string }[] = [
 export async function renderAdminAlarms(): Promise<void> {
   const alarms = await api.getMotherAlarms();
   const content = el('div', {});
+  const schemaReady = isMotherAlarmsSchemaReady();
+
+  if (!schemaReady) {
+    content.append(
+      el('div', {
+        className: 'card',
+        style: 'margin-bottom:1rem;padding:1rem;background:#fff8e6;border:1px solid #f0d78c',
+      },
+        el('p', { style: 'margin:0;font-weight:600' }, 'Database setup required'),
+        el('p', { style: 'margin:0.5rem 0 0;color:var(--color-text-muted)' },
+          'Run the Mom\'s Alarms migration in your Supabase SQL editor: '
+        ),
+        el('code', { style: 'display:block;margin-top:0.35rem;font-size:0.85rem' },
+          'supabase/migrations/20260926150000_mother_alarms.sql'
+        ),
+        el('p', { style: 'margin:0.5rem 0 0;color:var(--color-text-muted);font-size:0.9rem' },
+          'Or run the mother_alarms section at the end of supabase/run-in-sql-editor.sql, then refresh this page.'
+        )
+      )
+    );
+  }
 
   content.append(
     el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem' },
@@ -39,6 +60,12 @@ export async function renderAdminAlarms(): Promise<void> {
   renderAdminShell(content, '/admin/alarms');
 
   document.getElementById('new-alarm')?.addEventListener('click', () => {
+    if (!isMotherAlarmsSchemaReady()) {
+      window.alert(
+        'Mom\'s Alarms table is not set up yet. Run the migration in Supabase SQL editor, then refresh.'
+      );
+      return;
+    }
     const form = createAlarmForm(async () => { close(); await renderAdminAlarms(); });
     const close = showModal('New Alarm', form);
   });

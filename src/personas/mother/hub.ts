@@ -1,6 +1,6 @@
 import { api, isMomOwnedCalendarEvent } from '../../shared/api';
 import { clearActivePersona, isAuthenticated } from '../../shared/auth';
-import { navigate, MODULE_SELECT_PATH } from '../../shared/router';
+import { navigate, MODULE_SELECT_PATH, getCurrentRoute } from '../../shared/router';
 import {
   getCalendarViewMode,
   groupEventsByDay,
@@ -15,17 +15,25 @@ import { el, greeting, formatDate, formatCurrency, showModal, timeOfDayClass, sh
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm, openEventEditorModal } from './add-event';
 import { ensureMotherHubRealtime, teardownMotherHubRealtime } from '../../shared/realtime';
-import { ensureMotherAlarmService, teardownMotherAlarmService } from '../../shared/motherAlarms';
+import {
+  ensureMotherAlarmService,
+  setMotherHubAlarmSurfaceActive,
+  teardownMotherAlarmService,
+} from '../../shared/motherAlarms';
 import type { MotherCardImageConfig, MotherCardSide } from '../../shared/motherCardImages';
 import type { CalendarEvent, Transaction } from '../../shared/types';
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let idleCleanup: (() => void) | null = null;
+let hubRenderToken = 0;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const CARD_PREVIEW_WIDTH = 600;
 const CARD_PREVIEW_HEIGHT = 325;
 
 export async function renderMotherHub(): Promise<void> {
+  const renderToken = ++hubRenderToken;
+  setMotherHubAlarmSurfaceActive(false);
+
   const app = document.getElementById('app')!;
   app.className = 'mother-app';
   const nowIso = new Date().toISOString();
@@ -48,6 +56,10 @@ export async function renderMotherHub(): Promise<void> {
     api.getMotherHubTransactions(),
     api.getMotherCardImages(),
   ]);
+
+  if (renderToken !== hubRenderToken || getCurrentRoute() !== '/mother') {
+    return;
+  }
 
   const chimeAccount = accounts.find(
     (a: import('../../shared/types').FinancialAccount) => a.institution.toLowerCase() === 'chime' && a.display_on_mother_hub
@@ -239,10 +251,14 @@ export async function renderMotherHub(): Promise<void> {
       console.error('Mother hub refresh failed:', err);
     });
   });
+
+  setMotherHubAlarmSurfaceActive(true);
   void ensureMotherAlarmService();
 }
 
 export function teardownMotherHub(): void {
+  hubRenderToken++;
+  setMotherHubAlarmSurfaceActive(false);
   teardownMotherHubRealtime();
   teardownMotherAlarmService();
   idleCleanup?.();
