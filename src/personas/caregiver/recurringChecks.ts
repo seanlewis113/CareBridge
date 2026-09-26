@@ -1,7 +1,7 @@
 import { api } from '../../shared/api';
 import { getSession } from '../../shared/auth';
 import {
-  RECURRING_CHECK_STOCK_OPTIONS,
+  createStockLevelButtons,
   stockLevelBadge,
 } from '../../shared/recurringCheckStock';
 import { el, emptyState, formatDate, daysSinceLabel } from '../../shared/utils';
@@ -213,34 +213,3 @@ function renderCompactRecurringCheckRow(
   );
 }
 
-function createStockLevelButtons(
-  checkId: string,
-  profileId: string | undefined,
-  refresh: () => void | Promise<void>,
-  size: 'sm' | 'md' = 'md'
-): HTMLElement {
-  const wrap = el('div', { className: `stock-level-buttons stock-level-buttons--${size}` });
-  for (const opt of RECURRING_CHECK_STOCK_OPTIONS) {
-    const btn = el(
-      'button',
-      {
-        type: 'button',
-        className: `btn stock-level-btn stock-level-btn--${opt.value}${size === 'sm' ? ' btn-sm' : ''}`,
-      },
-      opt.label
-    );
-    btn.addEventListener('click', async () => {
-      if (!profileId) return;
-      wrap.querySelectorAll('button').forEach((b) => { (b as HTMLButtonElement).disabled = true; });
-      try {
-        await api.completeRecurringCheck(checkId, profileId, opt.value);
-        await refresh();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : 'Could not record check');
-        wrap.querySelectorAll('button').forEach((b) => { (b as HTMLButtonElement).disabled = false; });
-      }
-    });
-    wrap.append(btn);
-  }
-  return wrap;
-}

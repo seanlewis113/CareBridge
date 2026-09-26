@@ -686,7 +686,7 @@
   }
 
   .card-table-row--admin-check {
-    min-width: 30rem;
+    min-width: 38rem;
   }
 
   .card-table-row--admin-reminder {
@@ -1701,6 +1701,11 @@
 .admin-reminder-row .card-table-actions .btn {
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
+}
+
+.admin-check-stock-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
 }
 
 .card-table-row--caregiver-check .card-table-actions {

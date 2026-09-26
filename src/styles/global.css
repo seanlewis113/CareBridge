@@ -626,7 +626,7 @@ button, input, select, textarea {
 }
 
 .card-table-row--admin-check {
-  grid-template-columns: minmax(8rem, 2fr) 5.5rem minmax(9rem, 1.25fr) 9rem;
+  grid-template-columns: minmax(8rem, 2fr) 5.5rem minmax(9rem, 1.25fr) minmax(9rem, 1.1fr) 9rem;
   gap: 0.35rem 0.75rem;
 }
 

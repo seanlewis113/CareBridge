@@ -2,10 +2,12 @@ import { api, isRecurringChecksSchemaReady } from '../../shared/api';
 import { getSession } from '../../shared/auth';
 import { renderAdminShell } from '../shared/shell';
 import { el, showModal, confirmDialog, formatDateTime } from '../../shared/utils';
-import { stockLevelBadge } from '../../shared/recurringCheckStock';
+import { createStockLevelButtons, stockLevelBadge } from '../../shared/recurringCheckStock';
 import type { RecurringCheck, RecurringCheckWithStatus } from '../../shared/types';
 
 export async function renderAdminChecks(): Promise<void> {
+  const session = getSession();
+  const profileId = session.profile?.id;
   const checks = await api.getRecurringChecks();
   const checksWithStatus = await api.getRecurringChecksWithStatus(false);
   const statusById = new Map(checksWithStatus.map((c) => [c.id, c.last_completion]));
@@ -38,14 +40,14 @@ export async function renderAdminChecks(): Promise<void> {
       el('button', { className: 'btn btn-primary', type: 'button', id: 'new-check' }, '+ New Check')
     ),
     el('p', { style: 'color:var(--color-text-muted);margin-bottom:1rem' },
-      'Checks caregivers see on every visit — staples, supplies, and routine verifications. Caregivers log Full, Low, or Out when they check each item.'
+      'Checks on every visit — staples, supplies, and routine verifications. Log Full, Low, or Out when you or a caregiver checks each item.'
     )
   );
 
   if (checks.length === 0) {
     content.append(el('p', { className: 'empty-state' }, 'No recurring checks yet.'));
   } else {
-    content.append(renderChecksTable(checks, statusById, () => renderAdminChecks()));
+    content.append(renderChecksTable(checks, statusById, profileId, () => renderAdminChecks()));
   }
 
   renderAdminShell(content, '/admin/checks');
@@ -59,11 +61,12 @@ export async function renderAdminChecks(): Promise<void> {
 function renderChecksTable(
   checks: RecurringCheck[],
   statusById: Map<string, RecurringCheckWithStatus['last_completion']>,
+  profileId: string | undefined,
   refresh: () => void | Promise<void>
 ): HTMLElement {
   const body = el('div', { className: 'admin-check-list card-table-body' });
   for (const check of checks) {
-    body.append(renderCheckRow(check, statusById.get(check.id) ?? null, refresh));
+    body.append(renderCheckRow(check, statusById.get(check.id) ?? null, profileId, refresh));
   }
 
   return el('div', { className: 'card admin-check-table' },
@@ -73,6 +76,7 @@ function renderChecksTable(
           el('span', { className: 'card-table-label' }, 'Check'),
           el('span', { className: 'card-table-label' }, 'Stock'),
           el('span', { className: 'card-table-label' }, 'Last checked'),
+          el('span', { className: 'card-table-label' }, 'Update'),
           el('span', { className: 'card-table-label' }, '')
         )
       ),
@@ -84,6 +88,7 @@ function renderChecksTable(
 function renderCheckRow(
   check: RecurringCheck,
   lastCompletion: RecurringCheckWithStatus['last_completion'],
+  profileId: string | undefined,
   refresh: () => void | Promise<void>
 ): HTMLElement {
   const titleCell = el('span', { className: 'admin-task-title' }, check.title);
@@ -132,10 +137,18 @@ function renderCheckRow(
     }
   });
 
+  const updateCell = el('span', { className: 'card-table-actions admin-check-stock-actions' });
+  if (check.active) {
+    updateCell.append(createStockLevelButtons(check.id, profileId, refresh, 'sm'));
+  } else {
+    updateCell.append(el('span', { className: 'card-table-muted' }, '—'));
+  }
+
   const row = el('div', { className: 'admin-check-row card-table-row card-table-row--admin-check admin-task-row--clickable' },
     titleCell,
     stockCell,
     lastCell,
+    updateCell,
     el('span', { className: 'card-table-actions' }, editBtn, deleteBtn)
   );
 
