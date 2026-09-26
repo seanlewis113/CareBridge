@@ -567,12 +567,16 @@ function startAlarmSound(overlay?: HTMLElement): void {
   }
 }
 
-async function retryAlarmSoundFromUserTap(overlay: HTMLElement, epoch: number): Promise<void> {
+async function ensureAlarmSoundPlaying(overlay: HTMLElement, epoch: number): Promise<void> {
   if (epoch !== alarmSoundEpoch || activeOverlay !== overlay) return;
+  if (isAlarmSoundActive()) {
+    updateAlarmSoundHint(overlay);
+    return;
+  }
+
   await unlockMotherAlarmAudioAsync();
   if (epoch !== alarmSoundEpoch || activeOverlay !== overlay) return;
 
-  stopFallbackBeepsOnly();
   startAlarmSound(overlay);
   await new Promise((resolve) => setTimeout(resolve, 280));
   if (epoch !== alarmSoundEpoch || activeOverlay !== overlay) return;
@@ -650,19 +654,21 @@ function showAlarmOverlay(alarm: MotherAlarm): void {
   pingMotherAlarmAudioKeepAlive();
   void unlockMotherAlarmAudioAsync().then(() => {
     if (activeOverlay !== overlay || soundEpoch !== alarmSoundEpoch) return;
-    startAlarmSound(overlay);
-    window.setTimeout(() => {
-      if (activeOverlay !== overlay || soundEpoch !== alarmSoundEpoch) return;
-      updateAlarmSoundHint(overlay);
-    }, 450);
+    void ensureAlarmSoundPlaying(overlay, soundEpoch);
   });
 
   const retrySoundFromTap = (event: Event) => {
     if ((event.target as HTMLElement | null)?.closest('#mother-alarm-ok')) return;
-    void retryAlarmSoundFromUserTap(overlay, soundEpoch);
+    void ensureAlarmSoundPlaying(overlay, soundEpoch);
   };
 
   overlay.addEventListener('pointerdown', retrySoundFromTap, { capture: true });
+
+  alarmSoundRetryTimer = setInterval(() => {
+    if (activeOverlay !== overlay || soundEpoch !== alarmSoundEpoch) return;
+    if (isAlarmSoundActive()) return;
+    void ensureAlarmSoundPlaying(overlay, soundEpoch);
+  }, 1500);
 
   clearAlarmSoundHealthTimer();
   alarmSoundHealthTimer = setInterval(() => {
