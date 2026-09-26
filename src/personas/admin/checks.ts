@@ -42,15 +42,11 @@ export async function renderAdminChecks(): Promise<void> {
     )
   );
 
-  const list = el('div', {});
   if (checks.length === 0) {
-    list.append(el('p', { className: 'empty-state' }, 'No recurring checks yet.'));
+    content.append(el('p', { className: 'empty-state' }, 'No recurring checks yet.'));
   } else {
-    for (const check of checks) {
-      list.append(renderCheckCard(check, statusById.get(check.id) ?? null, () => renderAdminChecks()));
-    }
+    content.append(renderChecksTable(checks, statusById, () => renderAdminChecks()));
   }
-  content.append(list);
 
   renderAdminShell(content, '/admin/checks');
 
@@ -60,58 +56,95 @@ export async function renderAdminChecks(): Promise<void> {
   });
 }
 
-function renderCheckCard(
-  check: RecurringCheck,
-  lastCompletion: RecurringCheckWithStatus['last_completion'],
-  refresh: () => void
+function renderChecksTable(
+  checks: RecurringCheck[],
+  statusById: Map<string, RecurringCheckWithStatus['last_completion']>,
+  refresh: () => void | Promise<void>
 ): HTMLElement {
-  const meta = el('div', { style: 'margin-top:0.35rem' });
-  if (!check.active) {
-    meta.append(el('span', { className: 'badge', style: 'background:#eee' }, 'Inactive'));
-  }
-  if (lastCompletion) {
-    const who = lastCompletion.completed_by_profile?.display_name ?? 'Someone';
-    meta.append(
-      el('div', { style: 'display:flex;align-items:center;gap:0.5rem;margin-top:0.35rem;flex-wrap:wrap' },
-        stockLevelBadge(lastCompletion.stock_level),
-        el('p', { className: 'recurring-check-last', style: 'margin:0' },
-          `Last checked ${formatDateTime(lastCompletion.completed_at)} by ${who}`
-        )
-      )
-    );
-  } else if (check.active) {
-    meta.append(
-      el('p', { className: 'recurring-check-never', style: 'margin:0.35rem 0 0' }, 'Not yet checked')
-    );
+  const body = el('div', { className: 'admin-check-list card-table-body' });
+  for (const check of checks) {
+    body.append(renderCheckRow(check, statusById.get(check.id) ?? null, refresh));
   }
 
-  const card = el('div', { className: 'card', style: 'margin-bottom:0.75rem' },
-    el('div', {},
-      el('p', { style: 'margin:0;font-size:1.05rem;font-weight:600' }, check.title),
-      check.description
-        ? el('p', { style: 'margin:0.35rem 0 0;color:var(--color-text-muted)' }, check.description)
-        : null,
-      meta
-    ),
-    el('div', { className: 'task-actions' },
-      el('button', { className: 'btn btn-secondary', type: 'button' }, 'Edit'),
-      el('button', { className: 'btn btn-danger', type: 'button' }, 'Delete')
+  return el('div', { className: 'card admin-check-table' },
+    el('div', { className: 'card-table' },
+      el('div', { className: 'card-table-header' },
+        el('div', { className: 'card-table-row card-table-row--admin-check' },
+          el('span', { className: 'card-table-label' }, 'Check'),
+          el('span', { className: 'card-table-label' }, 'Stock'),
+          el('span', { className: 'card-table-label' }, 'Last checked'),
+          el('span', { className: 'card-table-label' }, '')
+        )
+      ),
+      body
     )
   );
+}
 
-  card.querySelector('.btn-secondary')?.addEventListener('click', () => {
+function renderCheckRow(
+  check: RecurringCheck,
+  lastCompletion: RecurringCheckWithStatus['last_completion'],
+  refresh: () => void | Promise<void>
+): HTMLElement {
+  const titleCell = el('span', { className: 'admin-task-title' }, check.title);
+  if (check.description) {
+    titleCell.title = check.description;
+    titleCell.append(
+      el('span', { className: 'admin-task-checklist-hint card-table-muted' }, check.description)
+    );
+  }
+  if (!check.active) {
+    titleCell.append(el('span', { className: 'badge admin-rx-inactive-badge' }, 'Inactive'));
+  }
+
+  const stockCell = el('span', {});
+  if (lastCompletion) {
+    stockCell.append(stockLevelBadge(lastCompletion.stock_level));
+  } else if (check.active) {
+    stockCell.append(el('span', { className: 'recurring-check-never card-table-muted' }, 'Not checked'));
+  } else {
+    stockCell.append(el('span', { className: 'card-table-muted' }, '—'));
+  }
+
+  const lastCell = el('span', { className: 'admin-task-title' });
+  if (lastCompletion) {
+    const who = lastCompletion.completed_by_profile?.display_name ?? 'Someone';
+    lastCell.append(
+      el('span', {}, formatDateTime(lastCompletion.completed_at)),
+      el('span', { className: 'admin-task-checklist-hint card-table-muted' }, who)
+    );
+  } else {
+    lastCell.append(el('span', { className: 'card-table-muted' }, '—'));
+  }
+
+  const editBtn = el('button', { className: 'btn btn-secondary', type: 'button' }, 'Edit');
+  const deleteBtn = el('button', { className: 'btn btn-danger', type: 'button' }, 'Delete');
+  editBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     const form = createCheckForm(async () => { close(); await refresh(); }, check);
     const close = showModal('Edit Recurring Check', form);
   });
-
-  card.querySelector('.btn-danger')?.addEventListener('click', async () => {
+  deleteBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
     if (await confirmDialog('Delete this recurring check and its history?')) {
       await api.deleteRecurringCheck(check.id);
       await refresh();
     }
   });
 
-  return card;
+  const row = el('div', { className: 'admin-check-row card-table-row card-table-row--admin-check admin-task-row--clickable' },
+    titleCell,
+    stockCell,
+    lastCell,
+    el('span', { className: 'card-table-actions' }, editBtn, deleteBtn)
+  );
+
+  row.addEventListener('click', () => {
+    const form = createCheckForm(async () => { close(); await refresh(); }, check);
+    const close = showModal('Edit Recurring Check', form);
+  });
+
+  return row;
 }
 
 function createCheckForm(onSuccess: () => void, existing?: RecurringCheck): HTMLElement {

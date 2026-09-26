@@ -18,15 +18,11 @@ export async function renderAdminReminders(): Promise<void> {
     )
   );
 
-  const list = el('div', {});
   if (reminders.length === 0) {
-    list.append(el('p', { className: 'empty-state' }, 'No reminders yet.'));
+    content.append(el('p', { className: 'empty-state' }, 'No reminders yet.'));
   } else {
-    for (const reminder of reminders) {
-      list.append(renderReminderCard(reminder, () => renderAdminReminders()));
-    }
+    content.append(renderRemindersTable(reminders, () => renderAdminReminders()));
   }
-  content.append(list);
 
   renderAdminShell(content, '/admin/reminders');
 
@@ -36,39 +32,65 @@ export async function renderAdminReminders(): Promise<void> {
   });
 }
 
-function renderReminderCard(reminder: Reminder, refresh: () => void): HTMLElement {
-  const card = el('div', { className: 'card', style: 'margin-bottom:0.75rem' },
-    el('div', { style: 'display:flex;justify-content:space-between;gap:0.5rem' },
-      el('div', {},
-        el('p', { style: 'margin:0;font-size:1.05rem' }, reminder.body),
-        el('div', { style: 'margin-top:0.35rem' },
-          el('span', { className: `badge ${reminder.priority === 'high' ? 'badge-high' : ''}` }, reminder.priority),
-          reminder.show_on_mother_hub
-            ? el('span', { className: 'badge badge-completed', style: 'margin-left:0.5rem' }, 'On Mom\'s hub')
-            : null,
-          !reminder.active ? el('span', { className: 'badge', style: 'margin-left:0.5rem;background:#eee' }, 'Inactive') : null,
+function renderRemindersTable(reminders: Reminder[], refresh: () => void | Promise<void>): HTMLElement {
+  const body = el('div', { className: 'admin-reminder-list card-table-body' });
+  for (const reminder of reminders) {
+    body.append(renderReminderRow(reminder, refresh));
+  }
+
+  return el('div', { className: 'card admin-reminder-table' },
+    el('div', { className: 'card-table' },
+      el('div', { className: 'card-table-header' },
+        el('div', { className: 'card-table-row card-table-row--admin-reminder' },
+          el('span', { className: 'card-table-label' }, 'Reminder'),
+          el('span', { className: 'card-table-label' }, 'Flags'),
+          el('span', { className: 'card-table-label' }, '')
         )
-      )
-    ),
-    el('div', { className: 'task-actions' },
-      el('button', { className: 'btn btn-secondary', type: 'button' }, 'Edit'),
-      el('button', { className: 'btn btn-danger', type: 'button' }, 'Delete')
+      ),
+      body
     )
   );
+}
 
-  card.querySelector('.btn-secondary')?.addEventListener('click', () => {
+function renderReminderRow(reminder: Reminder, refresh: () => void | Promise<void>): HTMLElement {
+  const flags = el('div', { className: 'task-row-flag-badges' });
+  flags.append(
+    el('span', { className: `badge ${reminder.priority === 'high' ? 'badge-high' : ''}` }, reminder.priority)
+  );
+  if (reminder.show_on_mother_hub) {
+    flags.append(el('span', { className: 'badge badge-completed' }, 'On Mom\'s hub'));
+  }
+  if (!reminder.active) {
+    flags.append(el('span', { className: 'badge admin-rx-inactive-badge' }, 'Inactive'));
+  }
+
+  const editBtn = el('button', { className: 'btn btn-secondary', type: 'button' }, 'Edit');
+  const deleteBtn = el('button', { className: 'btn btn-danger', type: 'button' }, 'Delete');
+  editBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     const form = createReminderForm(async () => { close(); await refresh(); }, reminder);
     const close = showModal('Edit Reminder', form);
   });
-
-  card.querySelector('.btn-danger')?.addEventListener('click', async () => {
+  deleteBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
     if (await confirmDialog('Delete this reminder?')) {
       await api.deleteReminder(reminder.id);
       await refresh();
     }
   });
 
-  return card;
+  const row = el('div', { className: 'admin-reminder-row card-table-row card-table-row--admin-reminder admin-task-row--clickable' },
+    el('span', { className: 'admin-task-title' }, reminder.body),
+    el('span', {}, flags),
+    el('span', { className: 'card-table-actions' }, editBtn, deleteBtn)
+  );
+
+  row.addEventListener('click', () => {
+    const form = createReminderForm(async () => { close(); await refresh(); }, reminder);
+    const close = showModal('Edit Reminder', form);
+  });
+
+  return row;
 }
 
 function createReminderForm(onSuccess: () => void, existing?: Reminder): HTMLElement {

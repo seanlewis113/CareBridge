@@ -6,7 +6,6 @@ import { navigate } from '../../shared/router';
 import { ensureTaskRealtime } from '../../shared/realtime';
 import {
   prescriptionRefillBadge,
-  prescriptionRefillLabel,
   prescriptionRefillUrgency,
 } from '../../shared/prescriptionRefill';
 import type { Prescription } from '../../shared/types';
@@ -120,23 +119,82 @@ export async function renderPrescriptionsSection(
     return section;
   }
 
-  const list = el('div', { className: 'caregiver-task-list' });
-  for (const rx of prescriptions) {
-    list.append(renderPrescriptionCard(rx, refresh));
-  }
-  section.append(list);
+  section.append(renderPrescriptionsTable(prescriptions, refresh));
   return section;
+}
+
+function renderPrescriptionsTable(
+  prescriptions: Prescription[],
+  refresh: () => void | Promise<void>
+): HTMLElement {
+  const body = el('div', { className: 'admin-task-list card-table-body' });
+  for (const rx of prescriptions) {
+    body.append(renderPrescriptionTableRow(rx, refresh));
+  }
+
+  return el('div', { className: 'card admin-task-table' },
+    el('div', { className: 'card-table' },
+      el('div', { className: 'card-table-header' },
+        el('div', { className: 'card-table-row card-table-row--caregiver-rx' },
+          el('span', { className: 'card-table-label' }, 'Medication'),
+          el('span', { className: 'card-table-label' }, 'Dosage'),
+          el('span', { className: 'card-table-label' }, 'Next refill'),
+          el('span', { className: 'card-table-label' }, 'Status'),
+          el('span', { className: 'card-table-label' }, '')
+        )
+      ),
+      body
+    )
+  );
+}
+
+function renderPrescriptionTableRow(
+  rx: Prescription,
+  refresh: () => void | Promise<void>
+): HTMLElement {
+  const titleCell = el('span', { className: 'admin-task-title' }, rx.name);
+  if (rx.instructions) {
+    titleCell.title = rx.instructions;
+    titleCell.append(
+      el('span', { className: 'admin-task-checklist-hint card-table-muted' }, rx.instructions)
+    );
+  }
+
+  const urgency = prescriptionRefillUrgency(rx.next_refill_date);
+  const statusCell = el('span', {},
+    urgency === 'unset'
+      ? el('span', { className: 'card-table-muted' }, 'Set date')
+      : prescriptionRefillBadge(rx.next_refill_date)
+  );
+
+  const refillBtn = el('button', { className: 'btn btn-primary', type: 'button' }, 'Refill');
+  refillBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showRefillModal(rx, refresh);
+  });
+
+  const row = el('div', {
+    className: 'admin-task-row card-table-row card-table-row--caregiver-rx admin-task-row--clickable',
+  },
+    titleCell,
+    el('span', { className: 'admin-rx-dosage' }, formatRxSummary(rx)),
+    el('span', {},
+      rx.next_refill_date
+        ? formatDate(rx.next_refill_date)
+        : el('span', { className: 'card-table-muted' }, '—')
+    ),
+    statusCell,
+    el('span', { className: 'card-table-actions' }, refillBtn)
+  );
+
+  row.addEventListener('click', () => showRefillModal(rx, refresh));
+  return row;
 }
 
 function formatRxSummary(rx: Prescription): string {
   const parts = [rx.dosage];
   if (rx.frequency) parts.push(rx.frequency);
   return parts.join(' · ');
-}
-
-function refillStatusClass(rx: Prescription): string {
-  const urgency = prescriptionRefillUrgency(rx.next_refill_date);
-  return urgency === 'unset' ? 'recurring-check-never' : `prescription-refill--${urgency}`;
 }
 
 function renderCompactPrescriptions(
@@ -218,57 +276,3 @@ function renderCompactPrescriptionRow(
   );
 }
 
-function renderPrescriptionCard(
-  rx: Prescription,
-  refresh: () => void | Promise<void>
-): HTMLElement {
-  const header = el('div', { className: 'caregiver-task-card-header' },
-    el('h3', { className: 'caregiver-task-card-title' }, rx.name),
-    prescriptionRefillBadge(rx.next_refill_date)
-  );
-
-  const body = el('div', { className: 'caregiver-task-card-body' });
-  body.append(
-    el('p', { className: 'caregiver-rx-dosage', style: 'font-weight:600;color:var(--color-primary)' },
-      formatRxSummary(rx)
-    )
-  );
-  if (rx.instructions) {
-    body.append(el('p', { className: 'caregiver-task-card-desc' }, rx.instructions));
-  }
-  if (rx.prescriber) {
-    body.append(
-      el('p', { className: 'caregiver-task-card-desc', style: 'font-size:0.9rem' },
-        `Prescriber: ${rx.prescriber}`
-      )
-    );
-  }
-
-  body.append(
-    el('p', { className: `recurring-check-last ${refillStatusClass(rx)}` },
-      prescriptionRefillLabel(rx.next_refill_date)
-    )
-  );
-  if (rx.last_refill_date) {
-    body.append(
-      el('p', { className: 'caregiver-task-card-desc', style: 'font-size:0.9rem' },
-        `Last filled ${formatDate(rx.last_refill_date)}`
-      )
-    );
-  }
-
-  const card = el('div', { className: 'card task-card caregiver-task-card prescription-card' }, header, body);
-
-  const actions = el('div', { className: 'task-actions caregiver-task-actions' });
-  const refillBtn = el(
-    'button',
-    { className: 'btn btn-primary', type: 'button' },
-    icon('calendar'),
-    'Update refill'
-  );
-  refillBtn.addEventListener('click', () => showRefillModal(rx, refresh));
-  actions.append(refillBtn);
-  card.append(actions);
-
-  return card;
-}

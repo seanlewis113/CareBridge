@@ -3,7 +3,6 @@ import { getSession } from '../../shared/auth';
 import {
   RECURRING_CHECK_STOCK_OPTIONS,
   stockLevelBadge,
-  stockLevelLabel,
 } from '../../shared/recurringCheckStock';
 import { el, emptyState, formatDate, daysSinceLabel } from '../../shared/utils';
 import { icon } from '../../shared/icons';
@@ -49,12 +48,76 @@ export async function renderRecurringChecksSection(
     return section;
   }
 
-  const list = el('div', { className: 'caregiver-task-list' });
-  for (const check of checks) {
-    list.append(renderRecurringCheckCard(check, profileId, refresh));
-  }
-  section.append(list);
+  section.append(renderRecurringChecksTable(checks, profileId, refresh));
   return section;
+}
+
+function renderRecurringChecksTable(
+  checks: RecurringCheckWithStatus[],
+  profileId: string | undefined,
+  refresh: () => void | Promise<void>
+): HTMLElement {
+  const body = el('div', { className: 'admin-task-list card-table-body' });
+  for (const check of checks) {
+    body.append(renderRecurringCheckTableRow(check, profileId, refresh));
+  }
+
+  return el('div', { className: 'card admin-task-table' },
+    el('div', { className: 'card-table' },
+      el('div', { className: 'card-table-header' },
+        el('div', { className: 'card-table-row card-table-row--caregiver-check' },
+          el('span', { className: 'card-table-label' }, 'Check'),
+          el('span', { className: 'card-table-label' }, 'Stock'),
+          el('span', { className: 'card-table-label' }, 'Last checked'),
+          el('span', { className: 'card-table-label' }, 'By'),
+          el('span', { className: 'card-table-label' }, '')
+        )
+      ),
+      body
+    )
+  );
+}
+
+function renderRecurringCheckTableRow(
+  check: RecurringCheckWithStatus,
+  profileId: string | undefined,
+  refresh: () => void | Promise<void>
+): HTMLElement {
+  const completedAt = check.last_completion?.completed_at;
+  const who = check.last_completion?.completed_by_profile?.display_name;
+  const stock = check.last_completion?.stock_level;
+
+  const titleCell = el('span', { className: 'admin-task-title' }, check.title);
+  if (check.description) {
+    titleCell.title = check.description;
+    titleCell.append(
+      el('span', { className: 'admin-task-checklist-hint card-table-muted' }, check.description)
+    );
+  }
+
+  const actions = el('span', { className: 'card-table-actions' },
+    createStockLevelButtons(check.id, profileId, refresh, 'sm')
+  );
+
+  return el('div', { className: 'card-table-row card-table-row--caregiver-check' },
+    titleCell,
+    el('span', {},
+      stock
+        ? stockLevelBadge(stock)
+        : el('span', { className: 'card-table-muted' }, '—')
+    ),
+    el('span', {},
+      completedAt
+        ? formatDate(completedAt)
+        : el('span', { className: 'recurring-check-never card-table-muted' }, 'Never')
+    ),
+    el('span', {},
+      who
+        ? who
+        : el('span', { className: 'card-table-muted' }, '—')
+    ),
+    actions
+  );
 }
 
 function renderCompactRecurringChecks(
@@ -148,46 +211,6 @@ function renderCompactRecurringCheckRow(
     ),
     actionCell
   );
-}
-
-function renderRecurringCheckCard(
-  check: RecurringCheckWithStatus,
-  profileId: string | undefined,
-  refresh: () => void | Promise<void>
-): HTMLElement {
-  const header = el('div', { className: 'caregiver-task-card-header' },
-    el('h3', { className: 'caregiver-task-card-title' }, check.title)
-  );
-
-  const body = el('div', { className: 'caregiver-task-card-body' });
-  if (check.description) {
-    body.append(el('p', { className: 'caregiver-task-card-desc' }, check.description));
-  }
-
-  if (check.last_completion) {
-    const who = check.last_completion.completed_by_profile?.display_name ?? 'Someone';
-    const completedAt = check.last_completion.completed_at;
-    const stock = check.last_completion.stock_level;
-    body.append(
-      el('p', { className: 'recurring-check-last' },
-        `Stock: ${stockLevelLabel(stock)} · Last checked ${formatDate(completedAt)} by ${who} (${daysSinceLabel(completedAt)})`
-      ),
-      stockLevelBadge(stock)
-    );
-  } else {
-    body.append(el('p', { className: 'recurring-check-last recurring-check-never' }, 'Not yet checked'));
-  }
-
-  const card = el('div', { className: 'card task-card caregiver-task-card recurring-check-card' }, header, body);
-
-  const actions = el('div', { className: 'task-actions caregiver-task-actions recurring-check-stock-actions' });
-  actions.append(
-    el('span', { className: 'recurring-check-stock-actions-label' }, 'Current stock:'),
-    createStockLevelButtons(check.id, profileId, refresh)
-  );
-  card.append(actions);
-
-  return card;
 }
 
 function createStockLevelButtons(

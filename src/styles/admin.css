@@ -685,8 +685,30 @@
     min-width: 34rem;
   }
 
+  .card-table-row--admin-check {
+    min-width: 30rem;
+  }
+
+  .card-table-row--admin-reminder {
+    min-width: 28rem;
+  }
+
   .card-table-row--caregiver-task {
     min-width: 30rem;
+  }
+
+  .card-table-row--caregiver-rx {
+    min-width: 32rem;
+  }
+
+  .card-table-row--caregiver-check {
+    min-width: 34rem;
+  }
+
+  .admin-check-table,
+  .admin-reminder-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .caregiver-dash-check-table {
@@ -1659,8 +1681,31 @@
   white-space: nowrap;
 }
 
-.admin-rx-table {
+.admin-rx-table,
+.admin-check-table,
+.admin-reminder-table {
   padding: 0.65rem 1rem 0.75rem;
+}
+
+.admin-check-list .card-table-row,
+.admin-reminder-list .card-table-row {
+  padding: 0.45rem 0;
+}
+
+.admin-check-row:hover,
+.admin-reminder-row:hover {
+  background: #fffaf3;
+}
+
+.admin-check-row .card-table-actions .btn,
+.admin-reminder-row .card-table-actions .btn {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.card-table-row--caregiver-check .card-table-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
 }
 
 .admin-rx-list .card-table-row {
