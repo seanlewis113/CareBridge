@@ -34,9 +34,8 @@ import type {
   MotherCardSide,
 } from './motherCardImages';
 import {
-  clearLegacyMotherCardStore,
-  motherCardImagesJsonIsEmpty,
   readLegacyMotherCardStore,
+  writeMotherCardLocalStore,
 } from './motherCardImages';
 
 type TableName = keyof ReturnType<typeof loadLocalStore>;
@@ -223,69 +222,13 @@ export const api = {
   },
 
   async getMotherCardImages(): Promise<MotherCardImageStore> {
-    const settings = await this.getSettings();
-    let store = resolveMotherCardImageStore(settings.mother_card_images ?? {});
-
-    if (motherCardImagesJsonIsEmpty(settings.mother_card_images)) {
-      const legacy = readLegacyMotherCardStore();
-      const sides = (['front', 'back'] as MotherCardSide[]).filter((side) => legacy[side]);
-      if (sides.length > 0) {
-        for (const side of sides) {
-          const config = legacy[side]!;
-          await this.saveMotherCardImage(side, config);
-        }
-        clearLegacyMotherCardStore();
-        const refreshed = await this.getSettings();
-        store = resolveMotherCardImageStore(refreshed.mother_card_images ?? {});
-      }
-    }
-
-    return store;
+    return readLegacyMotherCardStore();
   },
 
   async saveMotherCardImage(side: MotherCardSide, config: MotherCardImageConfig): Promise<void> {
-    if (isSupabaseConfigured) {
-      const croppedPath = `card/${side}-cropped.jpg`;
-      const originalPath = `card/${side}-original.jpg`;
-      const croppedBlob = dataUrlToBlob(config.cropped);
-      const originalBlob = dataUrlToBlob(config.original);
-
-      const { error: croppedError } = await db()
-        .storage
-        .from('mother-hub')
-        .upload(croppedPath, croppedBlob, { upsert: true, contentType: croppedBlob.type || 'image/jpeg' });
-      if (croppedError) throw croppedError;
-
-      const { error: originalError } = await db()
-        .storage
-        .from('mother-hub')
-        .upload(originalPath, originalBlob, { upsert: true, contentType: originalBlob.type || 'image/jpeg' });
-      if (originalError) throw originalError;
-
-      const { error: metaError } = await db().rpc('update_mother_card_image_meta', {
-        p_side: side,
-        p_cropped_path: croppedPath,
-        p_original_path: originalPath,
-        p_zoom: config.zoom,
-        p_offset_x: config.offsetX,
-        p_offset_y: config.offsetY,
-      });
-      if (metaError) throw metaError;
-      return;
-    }
-
-    const settings = getLocal('settings');
-    const mother_card_images: MotherCardImagesJson = {
-      ...(settings.mother_card_images ?? {}),
-      [side]: {
-        cropped: config.cropped,
-        original: config.original,
-        zoom: config.zoom,
-        offset_x: config.offsetX,
-        offset_y: config.offsetY,
-      },
-    };
-    updateLocal('settings', () => ({ ...settings, mother_card_images }));
+    const store = readLegacyMotherCardStore();
+    store[side] = config;
+    writeMotherCardLocalStore(store);
     notifyLocalDataChange('mother_hub');
   },
 
@@ -1901,53 +1844,3 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-function dataUrlToBlob(dataUrl: string): Blob {
-  const [header, base64] = dataUrl.split(',');
-  if (!base64) throw new Error('Invalid image data');
-  const mime = header.match(/data:([^;]+)/)?.[1] ?? 'image/jpeg';
-  const bytes = atob(base64);
-  const buffer = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
-  return new Blob([buffer], { type: mime });
-}
-
-function motherHubPublicUrl(path: string): string {
-  const { data } = db().storage.from('mother-hub').getPublicUrl(path);
-  return data.publicUrl;
-}
-
-function resolveMotherCardImageStore(json: MotherCardImagesJson): MotherCardImageStore {
-  const result: MotherCardImageStore = {};
-  for (const side of ['front', 'back'] as MotherCardSide[]) {
-    const stored = json[side];
-    if (!stored) continue;
-
-    if (stored.cropped && stored.original) {
-      result[side] = {
-        original: stored.original,
-        cropped: stored.cropped,
-        zoom: stored.zoom,
-        offsetX: stored.offset_x,
-        offsetY: stored.offset_y,
-      };
-      continue;
-    }
-
-    if (stored.cropped_path && stored.original_path) {
-      const originalUrl = isSupabaseConfigured
-        ? motherHubPublicUrl(stored.original_path)
-        : stored.original_path;
-      const croppedUrl = isSupabaseConfigured
-        ? motherHubPublicUrl(stored.cropped_path)
-        : stored.cropped_path;
-      result[side] = {
-        original: originalUrl,
-        cropped: croppedUrl,
-        zoom: stored.zoom,
-        offsetX: stored.offset_x,
-        offsetY: stored.offset_y,
-      };
-    }
-  }
-  return result;
-}

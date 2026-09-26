@@ -34,6 +34,10 @@ export function readLegacyMotherCardStore(): MotherCardImageStore {
   }
 }
 
+export function writeMotherCardLocalStore(store: MotherCardImageStore): void {
+  localStorage.setItem(LEGACY_MOTHER_CARD_STORAGE_KEY, JSON.stringify(store));
+}
+
 export function clearLegacyMotherCardStore(): void {
   localStorage.removeItem(LEGACY_MOTHER_CARD_STORAGE_KEY);
 }
