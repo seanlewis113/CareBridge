@@ -106,8 +106,7 @@ export async function renderLanding(): Promise<void> {
     altAccess.append(personaAccessBtn);
   }
 
-  footer.append(altAccess);
-  container.append(hero, loginCard, footer);
+  container.append(hero, altAccess, loginCard, footer);
   app.replaceChildren(container);
 }
 
