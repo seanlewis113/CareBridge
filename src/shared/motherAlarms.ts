@@ -5,6 +5,8 @@ import type { MotherAlarm } from './types';
 import { el, todayISO } from './utils';
 
 const MOTHER_HUB_ROUTE = '/mother';
+/** Synthetic alarm used by the temporary hub “test sound” control only. */
+const MOTHER_ALARM_SOUND_TEST_ID = '__mother-alarm-sound-test__';
 
 const DISMISS_STORAGE_KEY = 'moms-care-alarm-dismissed';
 const TICK_MS = 15_000;
@@ -309,7 +311,9 @@ function showAlarmOverlay(alarm: MotherAlarm): void {
   alarmSoundRetryTimer = setInterval(retrySound, 900);
 
   const dismiss = () => {
-    markDismissedToday(alarm.id);
+    if (alarm.id !== MOTHER_ALARM_SOUND_TEST_ID) {
+      markDismissedToday(alarm.id);
+    }
     removeOverlay();
     void checkAlarms();
   };
@@ -337,7 +341,7 @@ function checkAlarms(): void {
 
 export function setMotherAlarmList(list: MotherAlarm[]): void {
   alarms = list.filter((a) => a.active);
-  if (showingAlarmId) {
+  if (showingAlarmId && showingAlarmId !== MOTHER_ALARM_SOUND_TEST_ID) {
     const current = alarms.find((a) => a.id === showingAlarmId);
     const now = new Date();
     if (!current || !shouldFire(current, now)) {
@@ -364,6 +368,21 @@ export async function ensureMotherAlarmService(): Promise<void> {
     console.warn('Could not load mother alarms:', err);
     alarms = [];
   }
+}
+
+/** Temporary dev helper: full alarm overlay + beeps (trigger from a user click). */
+export function previewMotherAlarmSoundForTesting(): void {
+  if (!canShowMotherAlarms()) return;
+  showAlarmOverlay({
+    id: MOTHER_ALARM_SOUND_TEST_ID,
+    title: 'Alarm test',
+    message: 'If you hear beeping, alarm sound is working.',
+    time_of_day: '00:00',
+    days_of_week: [0, 1, 2, 3, 4, 5, 6],
+    active: true,
+    created_by: null,
+    created_at: new Date().toISOString(),
+  });
 }
 
 export function teardownMotherAlarmService(): void {

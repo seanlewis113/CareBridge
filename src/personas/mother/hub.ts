@@ -17,6 +17,7 @@ import { renderAddEventForm, openEventEditorModal } from './add-event';
 import { ensureMotherHubRealtime, teardownMotherHubRealtime } from '../../shared/realtime';
 import {
   ensureMotherAlarmService,
+  previewMotherAlarmSoundForTesting,
   setMotherHubAlarmSurfaceActive,
   teardownMotherAlarmService,
 } from '../../shared/motherAlarms';
@@ -90,6 +91,13 @@ export async function renderMotherHub(): Promise<void> {
       )
     ),
     el('div', { className: 'mother-header-actions' },
+      el('button', {
+        className: 'mother-header-btn mother-header-btn--alarm-test',
+        type: 'button',
+        id: 'test-alarm-sound-btn',
+        'aria-label': 'Test alarm sound',
+        title: 'Test alarm sound (temporary)',
+      }, icon('bell')),
       el('button', {
         className: 'mother-header-btn',
         type: 'button',
@@ -242,6 +250,10 @@ export async function renderMotherHub(): Promise<void> {
   });
 
   document.getElementById('refresh-hub')?.addEventListener('click', () => renderMotherHub());
+
+  document.getElementById('test-alarm-sound-btn')?.addEventListener('click', () => {
+    previewMotherAlarmSoundForTesting();
+  });
 
   document.getElementById('switch-user-btn')?.addEventListener('click', () => showSwitchUserDialog());
 
