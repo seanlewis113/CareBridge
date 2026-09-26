@@ -10,7 +10,6 @@ export interface LocalDataStore {
   recurring_checks: import('./types').RecurringCheck[];
   recurring_check_completions: import('./types').RecurringCheckCompletion[];
   prescriptions: import('./types').Prescription[];
-  prescription_doses: import('./types').PrescriptionDose[];
   visit_notes: import('./types').VisitNote[];
   documents: import('./types').Document[];
   family_updates: import('./types').FamilyUpdate[];
@@ -185,6 +184,8 @@ function defaultStore(): LocalDataStore {
         frequency: 'Once daily in the morning',
         instructions: 'Take with water. May cause dizziness — sit up slowly.',
         prescriber: 'Dr. Martinez',
+        next_refill_date: null,
+        last_refill_date: null,
         active: true,
         created_by: adminId,
         created_at: now,
@@ -196,12 +197,13 @@ function defaultStore(): LocalDataStore {
         frequency: 'Once daily with breakfast',
         instructions: null,
         prescriber: null,
+        next_refill_date: null,
+        last_refill_date: null,
         active: true,
         created_by: adminId,
         created_at: now,
       },
     ],
-    prescription_doses: [],
     visit_notes: [],
     documents: [],
     family_updates: [],
@@ -254,9 +256,15 @@ export function loadLocalStore(): LocalDataStore {
         parsed.prescriptions = [];
         needsSave = true;
       }
-      if (!parsed.prescription_doses) {
-        parsed.prescription_doses = [];
-        needsSave = true;
+      for (const rx of parsed.prescriptions) {
+        if (rx.next_refill_date === undefined) {
+          rx.next_refill_date = null;
+          needsSave = true;
+        }
+        if (rx.last_refill_date === undefined) {
+          rx.last_refill_date = null;
+          needsSave = true;
+        }
       }
       for (const task of parsed.tasks) {
         if (task.claimed_by) {

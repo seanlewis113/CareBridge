@@ -26,12 +26,22 @@ export function formatDateTime(dateStr: string): string {
   return `${formatDate(dateStr)} at ${formatTime(dateStr)}`;
 }
 
-export function daysSince(dateStr: string): number {
+function startOfLocalDay(dateStr: string): Date {
   const then = new Date(dateStr);
-  const now = new Date();
-  const thenDay = new Date(then.getFullYear(), then.getMonth(), then.getDate());
-  const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return new Date(then.getFullYear(), then.getMonth(), then.getDate());
+}
+
+export function daysSince(dateStr: string): number {
+  const thenDay = startOfLocalDay(dateStr);
+  const nowDay = startOfLocalDay(new Date().toISOString());
   return Math.floor((nowDay.getTime() - thenDay.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/** Days from today until dateStr (negative if in the past). */
+export function daysUntil(dateStr: string): number {
+  const targetDay = startOfLocalDay(dateStr);
+  const nowDay = startOfLocalDay(new Date().toISOString());
+  return Math.floor((targetDay.getTime() - nowDay.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 export function daysSinceLabel(dateStr: string): string {

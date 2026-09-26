@@ -1356,6 +1356,52 @@
   color: #c62828;
 }
 
+.refill-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.refill-badge--ok {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.refill-badge--soon {
+  background: #fff8e1;
+  color: #b45309;
+}
+
+.refill-badge--overdue,
+.refill-badge--unset {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.prescription-refill--ok {
+  color: var(--color-text-muted);
+}
+
+.prescription-refill--soon {
+  color: var(--color-warning, #b45309);
+}
+
+.prescription-refill--overdue {
+  color: #c62828;
+  font-weight: 600;
+}
+
+.caregiver-task-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .stock-level-buttons {
   display: flex;
   flex-wrap: wrap;

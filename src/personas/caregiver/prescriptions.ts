@@ -1,11 +1,15 @@
 import { api } from '../../shared/api';
-import { getSession } from '../../shared/auth';
 import { renderCaregiverShell } from '../shared/shell';
-import { el, emptyState, formatDate, daysSinceLabel } from '../../shared/utils';
+import { el, emptyState, formatDate, showModal, todayISO } from '../../shared/utils';
 import { icon } from '../../shared/icons';
 import { navigate } from '../../shared/router';
 import { ensureTaskRealtime } from '../../shared/realtime';
-import type { PrescriptionWithStatus } from '../../shared/types';
+import {
+  prescriptionRefillBadge,
+  prescriptionRefillLabel,
+  prescriptionRefillUrgency,
+} from '../../shared/prescriptionRefill';
+import type { Prescription } from '../../shared/types';
 
 export interface PrescriptionsSectionOptions {
   compact?: boolean;
@@ -15,12 +19,69 @@ export interface PrescriptionsSectionOptions {
   viewAllLabel?: string;
 }
 
+function defaultNextRefillDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().slice(0, 10);
+}
+
+function showRefillModal(rx: Prescription, refresh: () => void | Promise<void>): void {
+  const form = el('form', { className: 'modal-body task-form' });
+  const nextInput = el('input', {
+    type: 'date',
+    id: 'rx-next-refill',
+    required: 'true',
+    value: rx.next_refill_date && rx.next_refill_date >= todayISO() ? rx.next_refill_date : defaultNextRefillDate(),
+  }) as HTMLInputElement;
+  const pickedUpToday = el('input', {
+    type: 'checkbox',
+    id: 'rx-picked-up-today',
+    checked: 'true',
+  }) as HTMLInputElement;
+
+  form.append(
+    el('p', { style: 'color:var(--color-text-muted);margin:0 0 1rem' },
+      `Set when ${rx.name} will need to be refilled again.`
+    ),
+    el('div', { className: 'form-group' },
+      el('label', { for: 'rx-next-refill' }, 'Next refill due'),
+      nextInput
+    ),
+    el('div', { className: 'task-form-options' },
+      el('label', { className: 'task-toggle-row', for: 'rx-picked-up-today' },
+        pickedUpToday,
+        el('span', {}, 'Picked up or filled today')
+      )
+    ),
+    el('button', { className: 'btn btn-primary btn-block', type: 'submit' }, 'Save')
+  );
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nextDate = nextInput.value;
+    if (!nextDate) return;
+    try {
+      if (pickedUpToday.checked) {
+        await api.recordPrescriptionRefill(rx.id, nextDate);
+      } else {
+        await api.updatePrescription(rx.id, { next_refill_date: nextDate });
+      }
+      close();
+      await refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not save refill date');
+    }
+  });
+
+  const close = showModal(`Refill — ${rx.name}`, form);
+}
+
 export async function renderCaregiverPrescriptionsPage(): Promise<void> {
   const content = el('div', {});
   content.append(
     el('h2', {}, icon('pill'), ' Medications'),
     el('p', { style: 'color:var(--color-text-muted);margin-bottom:1rem' },
-      'Current prescriptions and dosages. Log each dose when administered.'
+      'Current prescriptions and when each one needs to be refilled.'
     ),
     await renderPrescriptionsSection(() => renderCaregiverPrescriptionsPage())
   );
@@ -34,21 +95,19 @@ export async function renderPrescriptionsSection(
   refresh: () => void | Promise<void>,
   options?: PrescriptionsSectionOptions
 ): Promise<HTMLElement> {
-  const session = getSession();
-  const profileId = session.profile?.id;
   const prescriptions = await api.getPrescriptionsWithStatus();
   const compact = options?.compact ?? false;
   const max = options?.max ?? prescriptions.length;
 
   if (compact) {
-    return renderCompactPrescriptions(prescriptions, profileId, refresh, max, options);
+    return renderCompactPrescriptions(prescriptions, refresh, max, options);
   }
 
   const section = el('div', { className: 'prescriptions-section' });
   section.append(
     el('h2', { className: 'section-title' }, icon('pill'), ' Medications'),
     el('p', { className: 'section-hint' },
-      'Review dosages and log when each medication is given.'
+      'Review refill dates and update when you pick up a new supply.'
     )
   );
 
@@ -63,21 +122,25 @@ export async function renderPrescriptionsSection(
 
   const list = el('div', { className: 'caregiver-task-list' });
   for (const rx of prescriptions) {
-    list.append(renderPrescriptionCard(rx, profileId, refresh));
+    list.append(renderPrescriptionCard(rx, refresh));
   }
   section.append(list);
   return section;
 }
 
-function formatRxSummary(rx: PrescriptionWithStatus): string {
+function formatRxSummary(rx: Prescription): string {
   const parts = [rx.dosage];
   if (rx.frequency) parts.push(rx.frequency);
   return parts.join(' · ');
 }
 
+function refillStatusClass(rx: Prescription): string {
+  const urgency = prescriptionRefillUrgency(rx.next_refill_date);
+  return urgency === 'unset' ? 'recurring-check-never' : `prescription-refill--${urgency}`;
+}
+
 function renderCompactPrescriptions(
-  prescriptions: PrescriptionWithStatus[],
-  profileId: string | undefined,
+  prescriptions: Prescription[],
   refresh: () => void | Promise<void>,
   max: number,
   options?: PrescriptionsSectionOptions
@@ -112,68 +175,56 @@ function renderCompactPrescriptions(
     el('div', { className: 'caregiver-dash-check-row caregiver-dash-check-row--head' },
       el('span', { className: 'caregiver-dash-check-col-check' }, 'Medication'),
       el('span', { className: 'caregiver-dash-rx-col-dosage' }, 'Dosage'),
-      el('span', { className: 'caregiver-dash-check-col-date' }, 'Last dose'),
-      el('span', { className: 'caregiver-dash-check-col-by' }, 'By'),
+      el('span', { className: 'caregiver-dash-check-col-date' }, 'Refill'),
+      el('span', { className: 'caregiver-dash-check-col-by' }, 'Status'),
       readOnly ? null : el('span', { className: 'caregiver-dash-check-col-action' }, '')
     )
   );
   for (const rx of prescriptions.slice(0, max)) {
-    grid.append(renderCompactPrescriptionRow(rx, profileId, refresh, readOnly));
+    grid.append(renderCompactPrescriptionRow(rx, refresh, readOnly));
   }
   panel.append(el('div', { className: 'caregiver-dash-check-table' }, grid));
   return panel;
 }
 
 function renderCompactPrescriptionRow(
-  rx: PrescriptionWithStatus,
-  profileId: string | undefined,
+  rx: Prescription,
   refresh: () => void | Promise<void>,
   readOnly = false
 ): HTMLElement {
-  const administeredAt = rx.last_dose?.administered_at;
-  const who = rx.last_dose?.administered_by_profile?.display_name;
-
   let actionCell: HTMLElement | null = null;
   if (!readOnly) {
-    const doseBtn = el('button', { className: 'btn btn-primary btn-sm', type: 'button' }, 'Log dose');
-    doseBtn.addEventListener('click', async () => {
-      if (!profileId) return;
-      doseBtn.disabled = true;
-      try {
-        await api.logPrescriptionDose(rx.id, profileId);
-        await refresh();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : 'Could not log dose');
-        doseBtn.disabled = false;
-      }
-    });
-    actionCell = el('span', { className: 'caregiver-dash-check-col-action' }, doseBtn);
+    const refillBtn = el('button', { className: 'btn btn-primary btn-sm', type: 'button' }, 'Refill');
+    refillBtn.addEventListener('click', () => showRefillModal(rx, refresh));
+    actionCell = el('span', { className: 'caregiver-dash-check-col-action' }, refillBtn);
   }
+
+  const urgency = prescriptionRefillUrgency(rx.next_refill_date);
 
   return el('div', { className: 'caregiver-dash-check-row' },
     el('span', { className: 'caregiver-dash-check-col-check caregiver-dash-check-title' }, rx.name),
     el('span', { className: 'caregiver-dash-rx-col-dosage' }, formatRxSummary(rx)),
     el('span', { className: 'caregiver-dash-check-col-date' },
-      administeredAt
-        ? formatDate(administeredAt)
+      rx.next_refill_date
+        ? formatDate(rx.next_refill_date)
         : el('span', { className: 'caregiver-dash-check-warn' }, '—')
     ),
     el('span', { className: 'caregiver-dash-check-col-by' },
-      who
-        ? who
-        : el('span', { className: 'caregiver-dash-check-warn' }, '—')
+      urgency === 'unset'
+        ? el('span', { className: 'caregiver-dash-check-warn' }, 'Set date')
+        : prescriptionRefillBadge(rx.next_refill_date)
     ),
     actionCell
   );
 }
 
 function renderPrescriptionCard(
-  rx: PrescriptionWithStatus,
-  profileId: string | undefined,
+  rx: Prescription,
   refresh: () => void | Promise<void>
 ): HTMLElement {
   const header = el('div', { className: 'caregiver-task-card-header' },
-    el('h3', { className: 'caregiver-task-card-title' }, rx.name)
+    el('h3', { className: 'caregiver-task-card-title' }, rx.name),
+    prescriptionRefillBadge(rx.next_refill_date)
   );
 
   const body = el('div', { className: 'caregiver-task-card-body' });
@@ -193,39 +244,30 @@ function renderPrescriptionCard(
     );
   }
 
-  if (rx.last_dose) {
-    const who = rx.last_dose.administered_by_profile?.display_name ?? 'Someone';
-    const administeredAt = rx.last_dose.administered_at;
+  body.append(
+    el('p', { className: `recurring-check-last ${refillStatusClass(rx)}` },
+      prescriptionRefillLabel(rx.next_refill_date)
+    )
+  );
+  if (rx.last_refill_date) {
     body.append(
-      el('p', { className: 'recurring-check-last' },
-        `Last dose ${formatDate(administeredAt)} by ${who} (${daysSinceLabel(administeredAt)})`
+      el('p', { className: 'caregiver-task-card-desc', style: 'font-size:0.9rem' },
+        `Last filled ${formatDate(rx.last_refill_date)}`
       )
     );
-  } else {
-    body.append(el('p', { className: 'recurring-check-last recurring-check-never' }, 'No doses logged yet'));
   }
 
   const card = el('div', { className: 'card task-card caregiver-task-card prescription-card' }, header, body);
 
   const actions = el('div', { className: 'task-actions caregiver-task-actions' });
-  const doseBtn = el(
+  const refillBtn = el(
     'button',
     { className: 'btn btn-primary', type: 'button' },
-    icon('check-circle'),
-    'Log dose'
+    icon('calendar'),
+    'Update refill'
   );
-  doseBtn.addEventListener('click', async () => {
-    if (!profileId) return;
-    doseBtn.disabled = true;
-    try {
-      await api.logPrescriptionDose(rx.id, profileId);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not log dose');
-      doseBtn.disabled = false;
-    }
-  });
-  actions.append(doseBtn);
+  refillBtn.addEventListener('click', () => showRefillModal(rx, refresh));
+  actions.append(refillBtn);
   card.append(actions);
 
   return card;

@@ -78,7 +78,6 @@ const TASK_TABLES = [
   'recurring_checks',
   'recurring_check_completions',
   'prescriptions',
-  'prescription_doses',
 ] as const;
 
 export function subscribeMotherHubChanges(onChange: () => void): () => void {

@@ -19,8 +19,6 @@ import type {
   RecurringCheckStockLevel,
   RecurringCheckWithStatus,
   Prescription,
-  PrescriptionDose,
-  PrescriptionWithStatus,
   MotherHubTask,
   Task,
   TaskAssignment,
@@ -987,47 +985,21 @@ export const api = {
     return getLocal('prescriptions') ?? [];
   },
 
-  async getPrescriptionsWithStatus(activeOnly = true): Promise<PrescriptionWithStatus[]> {
+  async getPrescriptionsWithStatus(activeOnly = true): Promise<Prescription[]> {
     const prescriptions = await this.getPrescriptions();
     const visible = activeOnly ? prescriptions.filter((p) => p.active) : prescriptions;
+    return visible.map((rx) => ({
+      ...rx,
+      next_refill_date: rx.next_refill_date ?? null,
+      last_refill_date: rx.last_refill_date ?? null,
+    }));
+  },
 
-    if (isSupabaseConfigured) {
-      if (!prescriptionsSchemaReady) {
-        return visible.map((rx) => ({ ...rx, last_dose: null }));
-      }
-      const { data, error } = await db()
-        .from('prescription_doses')
-        .select('*, administered_by_profile:profiles!administered_by(*)')
-        .order('administered_at', { ascending: false });
-      if (error) {
-        if (isMissingDbTableError(error, 'prescription')) {
-          prescriptionsSchemaReady = false;
-          return visible.map((rx) => ({ ...rx, last_dose: null }));
-        }
-        throw error;
-      }
-      const doses = data as PrescriptionDose[];
-      return visible.map((rx) => {
-        const last = doses.find((d) => d.prescription_id === rx.id);
-        return { ...rx, last_dose: last ?? null };
-      });
-    }
-
-    const doses = getLocal('prescription_doses') ?? [];
-    const profiles = getLocal('profiles');
-    return visible.map((rx) => {
-      const last = doses
-        .filter((d) => d.prescription_id === rx.id)
-        .sort((a, b) => b.administered_at.localeCompare(a.administered_at))[0];
-      return {
-        ...rx,
-        last_dose: last
-          ? {
-              ...last,
-              administered_by_profile: profiles.find((p) => p.id === last.administered_by),
-            }
-          : null,
-      };
+  async recordPrescriptionRefill(id: string, nextRefillDate: string): Promise<Prescription> {
+    const lastRefillDate = new Date().toISOString().slice(0, 10);
+    return this.updatePrescription(id, {
+      last_refill_date: lastRefillDate,
+      next_refill_date: nextRefillDate,
     });
   },
 
@@ -1128,41 +1100,7 @@ export const api = {
       return;
     }
     updateLocal('prescriptions', (items) => items.filter((p) => p.id !== id));
-    updateLocal('prescription_doses', (items) =>
-      items.filter((d) => d.prescription_id !== id)
-    );
     notifyLocalDataChange('prescriptions');
-  },
-
-  async logPrescriptionDose(
-    prescriptionId: string,
-    profileId: string,
-    notes?: string | null
-  ): Promise<PrescriptionDose> {
-    const dose: PrescriptionDose = {
-      id: crypto.randomUUID(),
-      prescription_id: prescriptionId,
-      administered_by: profileId,
-      administered_at: new Date().toISOString(),
-      notes: notes ?? null,
-    };
-    if (isSupabaseConfigured) {
-      const { data, error } = await db()
-        .from('prescription_doses')
-        .insert(dose)
-        .select('*, administered_by_profile:profiles!administered_by(*)')
-        .single();
-      if (error) throw error;
-      await this.logActivity('prescription.dose', {
-        entityType: 'prescription',
-        entityId: prescriptionId,
-        metadata: { administered_by: profileId },
-      });
-      return data as PrescriptionDose;
-    }
-    updateLocal('prescription_doses', (items) => [dose, ...items]);
-    notifyLocalDataChange('prescriptions');
-    return dose;
   },
 
   async getVisitNotes(): Promise<VisitNote[]> {

@@ -672,3 +672,20 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.prescription_doses;
   END IF;
 END $$;
+
+-- Prescription refill dates (see migration 20260926130000_prescription_refill_dates.sql)
+ALTER TABLE prescriptions
+  ADD COLUMN IF NOT EXISTS next_refill_date DATE,
+  ADD COLUMN IF NOT EXISTS last_refill_date DATE;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE policyname = 'prescriptions_caregiver_refill_update'
+  ) THEN
+    CREATE POLICY prescriptions_caregiver_refill_update ON prescriptions
+      FOR UPDATE TO authenticated
+      USING (get_my_persona() IN ('family_caregiver', 'hired_caregiver'))
+      WITH CHECK (get_my_persona() IN ('family_caregiver', 'hired_caregiver'));
+  END IF;
+END $$;

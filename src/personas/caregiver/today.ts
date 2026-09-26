@@ -9,6 +9,7 @@ import { taskHasAssignees } from '../../shared/taskAssignments';
 import { renderCaregiverDashTaskPanel, sortCaregiverTasks } from './taskTable';
 import { renderRecurringChecksSection } from './recurringChecks';
 import { renderPrescriptionsSection } from './prescriptions';
+import { prescriptionsNeedingAttention } from '../../shared/prescriptionRefill';
 import { renderDashboardScheduleEventRow } from '../../shared/calendarViews';
 import { formatCalendarLastSynced, getLatestCalendarSyncAt } from '../../shared/calendarRecurrence';
 import type { CalendarEvent } from '../../shared/types';
@@ -41,7 +42,7 @@ export async function renderCaregiverToday(): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
   const todayEvents = events.filter((e) => e.start_at.startsWith(today));
   const uncheckedChecks = checks.filter((c) => !c.last_completion).length;
-  const undosedMeds = prescriptions.filter((rx) => !rx.last_dose).length;
+  const refillsDue = prescriptionsNeedingAttention(prescriptions);
 
   const refresh = () => renderCaregiverToday();
 
@@ -65,7 +66,7 @@ export async function renderCaregiverToday(): Promise<void> {
       statCard(String(checks.length), 'Recurring checks', '/caregiver/visit', 'list',
         uncheckedChecks > 0 ? `${uncheckedChecks} unchecked` : undefined),
       statCard(String(prescriptions.length), 'Medications', '/caregiver/prescriptions', 'pill',
-        undosedMeds > 0 ? `${undosedMeds} not logged` : undefined)
+        refillsDue > 0 ? `${refillsDue} need attention` : undefined)
     ),
     el('div', { className: 'caregiver-dash-grid' },
       renderSchedulePanel(todayEvents),

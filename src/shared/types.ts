@@ -113,22 +113,11 @@ export interface Prescription {
   frequency: string | null;
   instructions: string | null;
   prescriber: string | null;
+  next_refill_date: string | null;
+  last_refill_date: string | null;
   active: boolean;
   created_by: string | null;
   created_at: string;
-}
-
-export interface PrescriptionDose {
-  id: string;
-  prescription_id: string;
-  administered_by: string;
-  administered_at: string;
-  notes: string | null;
-  administered_by_profile?: Profile;
-}
-
-export interface PrescriptionWithStatus extends Prescription {
-  last_dose: PrescriptionDose | null;
 }
 
 export interface Reminder {

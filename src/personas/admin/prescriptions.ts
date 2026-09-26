@@ -1,14 +1,16 @@
 import { api, isPrescriptionsSchemaReady } from '../../shared/api';
 import { getSession } from '../../shared/auth';
 import { renderAdminShell } from '../shared/shell';
-import { el, showModal, confirmDialog, formatDateTime } from '../../shared/utils';
+import { el, showModal, confirmDialog, formatDate } from '../../shared/utils';
 import { icon } from '../../shared/icons';
-import type { Prescription, PrescriptionWithStatus } from '../../shared/types';
+import {
+  prescriptionRefillBadge,
+  prescriptionRefillLabel,
+} from '../../shared/prescriptionRefill';
+import type { Prescription } from '../../shared/types';
 
 export async function renderAdminPrescriptions(): Promise<void> {
   const prescriptions = await api.getPrescriptions();
-  const withStatus = await api.getPrescriptionsWithStatus(false);
-  const doseById = new Map(withStatus.map((rx) => [rx.id, rx.last_dose]));
 
   const content = el('div', {});
 
@@ -38,7 +40,7 @@ export async function renderAdminPrescriptions(): Promise<void> {
       el('button', { className: 'btn btn-primary', type: 'button', id: 'new-rx' }, '+ New Prescription')
     ),
     el('p', { style: 'color:var(--color-text-muted);margin-bottom:1rem' },
-      'Manage medications and dosages. Caregivers see active prescriptions and can log when each dose is given.'
+      'Manage medications and refill dates. Caregivers see active prescriptions and update when each Rx is filled.'
     )
   );
 
@@ -47,7 +49,7 @@ export async function renderAdminPrescriptions(): Promise<void> {
     list.append(el('p', { className: 'empty-state' }, 'No prescriptions yet.'));
   } else {
     for (const rx of prescriptions) {
-      list.append(renderPrescriptionCard(rx, doseById.get(rx.id) ?? null, () => renderAdminPrescriptions()));
+      list.append(renderPrescriptionCard(rx, () => renderAdminPrescriptions()));
     }
   }
   content.append(list);
@@ -66,11 +68,7 @@ function formatRxDetails(rx: Prescription): string {
   return parts.join(' · ');
 }
 
-function renderPrescriptionCard(
-  rx: Prescription,
-  lastDose: PrescriptionWithStatus['last_dose'],
-  refresh: () => void
-): HTMLElement {
+function renderPrescriptionCard(rx: Prescription, refresh: () => void): HTMLElement {
   const meta = el('div', { style: 'margin-top:0.35rem' });
   if (!rx.active) {
     meta.append(el('span', { className: 'badge', style: 'background:#eee' }, 'Inactive'));
@@ -92,17 +90,22 @@ function renderPrescriptionCard(
       )
     );
   }
-  if (lastDose) {
-    const who = lastDose.administered_by_profile?.display_name ?? 'Someone';
+  if (rx.active) {
     meta.append(
-      el('p', { className: 'recurring-check-last', style: 'margin:0.35rem 0 0' },
-        `Last dose ${formatDateTime(lastDose.administered_at)} by ${who}`
+      el('div', { style: 'display:flex;align-items:center;gap:0.5rem;margin:0.35rem 0 0;flex-wrap:wrap' },
+        prescriptionRefillBadge(rx.next_refill_date ?? null),
+        el('span', { className: 'recurring-check-last', style: 'margin:0' },
+          prescriptionRefillLabel(rx.next_refill_date ?? null)
+        )
       )
     );
-  } else if (rx.active) {
-    meta.append(
-      el('p', { className: 'recurring-check-never', style: 'margin:0.35rem 0 0' }, 'No doses logged yet')
-    );
+    if (rx.last_refill_date) {
+      meta.append(
+        el('p', { style: 'margin:0.25rem 0 0;color:var(--color-text-muted);font-size:0.9rem' },
+          `Last filled ${formatDate(rx.last_refill_date)}`
+        )
+      );
+    }
   }
 
   const card = el('div', { className: 'card', style: 'margin-bottom:0.75rem' },
@@ -122,7 +125,7 @@ function renderPrescriptionCard(
   });
 
   card.querySelector('.btn-danger')?.addEventListener('click', async () => {
-    if (await confirmDialog(`Delete ${rx.name} and its dose history?`)) {
+    if (await confirmDialog(`Delete ${rx.name}?`)) {
       await api.deletePrescription(rx.id);
       await refresh();
     }
@@ -167,6 +170,24 @@ function createPrescriptionForm(onSuccess: () => void, existing?: Prescription):
         })
       )
     ),
+    el('div', { className: 'form-row-two' },
+      el('div', { className: 'form-group' },
+        el('label', { for: 'rx-next-refill' }, 'Next refill due'),
+        el('input', {
+          type: 'date',
+          id: 'rx-next-refill',
+          value: existing?.next_refill_date ?? '',
+        })
+      ),
+      el('div', { className: 'form-group' },
+        el('label', { for: 'rx-last-refill' }, 'Last filled (optional)'),
+        el('input', {
+          type: 'date',
+          id: 'rx-last-refill',
+          value: existing?.last_refill_date ?? '',
+        })
+      )
+    ),
     el('div', { className: 'form-group' },
       el('label', { for: 'rx-instructions' }, 'Instructions (optional)'),
       el('textarea', { id: 'rx-instructions', placeholder: 'With food, special handling...' },
@@ -196,12 +217,16 @@ function createPrescriptionForm(onSuccess: () => void, existing?: Prescription):
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const nextRefill = (form.querySelector('#rx-next-refill') as HTMLInputElement).value.trim();
+    const lastRefill = (form.querySelector('#rx-last-refill') as HTMLInputElement).value.trim();
     const data = {
       name: (form.querySelector('#rx-name') as HTMLInputElement).value.trim(),
       dosage: (form.querySelector('#rx-dosage') as HTMLInputElement).value.trim(),
       frequency: (form.querySelector('#rx-frequency') as HTMLInputElement).value.trim() || null,
       instructions: (form.querySelector('#rx-instructions') as HTMLTextAreaElement).value.trim() || null,
       prescriber: (form.querySelector('#rx-prescriber') as HTMLInputElement).value.trim() || null,
+      next_refill_date: nextRefill || null,
+      last_refill_date: lastRefill || null,
       active: (form.querySelector('#rx-active') as HTMLInputElement).checked,
       created_by: session.profile?.id ?? null,
     };
