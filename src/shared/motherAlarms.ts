@@ -11,6 +11,9 @@ const TICK_MS = 15_000;
 const ALARM_BEEP_MS = 320;
 const ALARM_PAUSE_MS = 140;
 const ALARM_GAIN = 0.28;
+const ALARM_MAX_DURATION_MS = 3 * 60 * 1000;
+
+let alarmAutoStopTimer: ReturnType<typeof setTimeout> | null = null;
 
 let alarms: MotherAlarm[] = [];
 let serviceStarted = false;
@@ -173,6 +176,13 @@ function clearAlarmSoundRetryTimer(): void {
   }
 }
 
+function clearAlarmAutoStopTimer(): void {
+  if (alarmAutoStopTimer) {
+    clearTimeout(alarmAutoStopTimer);
+    alarmAutoStopTimer = null;
+  }
+}
+
 function stopAlarmBeepsOnly(): void {
   if (alarmBeepTimer) {
     clearInterval(alarmBeepTimer);
@@ -258,6 +268,7 @@ function disposeMotherAlarmAudio(): void {
 }
 
 function removeOverlay(): void {
+  clearAlarmAutoStopTimer();
   clearAlarmSoundRetryTimer();
   activeOverlay?.remove();
   activeOverlay = null;
@@ -315,6 +326,9 @@ function showAlarmOverlay(alarm: MotherAlarm): void {
   };
 
   panel.querySelector('#mother-alarm-ok')?.addEventListener('click', dismiss);
+
+  clearAlarmAutoStopTimer();
+  alarmAutoStopTimer = setTimeout(dismiss, ALARM_MAX_DURATION_MS);
 }
 
 function pickNextAlarm(now: Date): MotherAlarm | null {
