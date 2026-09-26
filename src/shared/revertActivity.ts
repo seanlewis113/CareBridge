@@ -5,6 +5,7 @@ import type {
   CalendarEvent,
   FinancialAccount,
   Reminder,
+  MotherAlarm,
   Task,
 } from './types';
 
@@ -27,16 +28,19 @@ export function isRevertible(log: ActivityLog): boolean {
 
   switch (log.action) {
     case 'task.create':
+    case 'mother_alarm.create':
     case 'reminder.create':
     case 'calendar.create':
     case 'document.create':
     case 'family_update.create':
       return !!log.entity_id;
     case 'task.delete':
+    case 'mother_alarm.delete':
     case 'reminder.delete':
     case 'calendar.delete':
       return !!metaSnapshot(log);
     case 'task.update':
+    case 'mother_alarm.update':
     case 'reminder.update':
     case 'calendar.update':
     case 'financial_account.update':
@@ -83,11 +87,20 @@ export async function revertActivity(log: ActivityLog): Promise<void> {
     case 'reminder.create':
       await api.deleteReminder(log.entity_id!);
       break;
+    case 'mother_alarm.create':
+      await api.deleteMotherAlarm(log.entity_id!);
+      break;
     case 'reminder.delete':
       await api.restoreReminder(metaSnapshot<Reminder>(log)!);
       break;
+    case 'mother_alarm.delete':
+      await api.restoreMotherAlarm(metaSnapshot<MotherAlarm>(log)!);
+      break;
     case 'reminder.update':
       await api.updateReminder(log.entity_id!, metaPrevious<Reminder>(log)!);
+      break;
+    case 'mother_alarm.update':
+      await api.updateMotherAlarm(log.entity_id!, metaPrevious<MotherAlarm>(log)!);
       break;
     case 'document.create':
       await api.deleteDocument(log.entity_id!);

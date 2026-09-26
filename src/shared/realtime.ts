@@ -69,6 +69,7 @@ const MOTHER_HUB_TABLES = [
   'profiles',
   'calendar_events',
   'reminders',
+  'mother_alarms',
   'financial_accounts',
   'app_settings',
 ] as const;

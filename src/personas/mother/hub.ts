@@ -15,6 +15,7 @@ import { el, greeting, formatDate, formatCurrency, showModal, timeOfDayClass, sh
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm, openEventEditorModal } from './add-event';
 import { ensureMotherHubRealtime, teardownMotherHubRealtime } from '../../shared/realtime';
+import { ensureMotherAlarmService, teardownMotherAlarmService } from '../../shared/motherAlarms';
 import type { MotherCardImageConfig, MotherCardSide } from '../../shared/motherCardImages';
 import type { CalendarEvent, Transaction } from '../../shared/types';
 
@@ -238,10 +239,12 @@ export async function renderMotherHub(): Promise<void> {
       console.error('Mother hub refresh failed:', err);
     });
   });
+  void ensureMotherAlarmService();
 }
 
 export function teardownMotherHub(): void {
   teardownMotherHubRealtime();
+  teardownMotherAlarmService();
   idleCleanup?.();
   idleCleanup = null;
 }

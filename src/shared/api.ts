@@ -14,6 +14,7 @@ import type {
   Persona,
   Profile,
   Reminder,
+  MotherAlarm,
   RecurringCheck,
   RecurringCheckCompletion,
   RecurringCheckStockLevel,
@@ -107,6 +108,13 @@ function normalizeRecurringCheckCompletion(
     return completion;
   }
   return { ...completion, stock_level: 'full' };
+}
+
+function normalizeMotherAlarm(alarm: MotherAlarm): MotherAlarm {
+  const days = Array.isArray(alarm.days_of_week)
+    ? [...alarm.days_of_week].sort((a, b) => a - b)
+    : [0, 1, 2, 3, 4, 5, 6];
+  return { ...alarm, days_of_week: days as MotherAlarm['days_of_week'] };
 }
 
 function isMissingDbTableError(error: unknown, tableHint?: string): boolean {
@@ -840,6 +848,112 @@ export const api = {
       return data as Reminder;
     }
     updateLocal('reminders', (items) => [snapshot, ...items]);
+    return snapshot;
+  },
+
+  async getMotherAlarms(): Promise<MotherAlarm[]> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await db()
+        .from('mother_alarms')
+        .select('*')
+        .order('time_of_day', { ascending: true });
+      if (error) throw error;
+      return (data as MotherAlarm[]).map(normalizeMotherAlarm);
+    }
+    return getLocal('mother_alarms') ?? [];
+  },
+
+  async createMotherAlarm(alarm: Omit<MotherAlarm, 'id' | 'created_at'>): Promise<MotherAlarm> {
+    const newAlarm: MotherAlarm = {
+      ...alarm,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+    };
+    if (isSupabaseConfigured) {
+      const { data, error } = await db().from('mother_alarms').insert(newAlarm).select().single();
+      if (error) throw error;
+      await this.logActivity('mother_alarm.create', {
+        entityType: 'mother_alarm',
+        entityId: (data as MotherAlarm).id,
+        metadata: { title: newAlarm.title },
+      });
+      return normalizeMotherAlarm(data as MotherAlarm);
+    }
+    updateLocal('mother_alarms', (items) => [...items, newAlarm]);
+    notifyLocalDataChange('mother_hub');
+    return newAlarm;
+  },
+
+  async updateMotherAlarm(id: string, updates: Partial<MotherAlarm>): Promise<MotherAlarm> {
+    if (isSupabaseConfigured) {
+      const { data: before, error: beforeError } = await db()
+        .from('mother_alarms')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (beforeError) throw beforeError;
+      const { data, error } = await db()
+        .from('mother_alarms')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      await this.logActivity('mother_alarm.update', {
+        entityType: 'mother_alarm',
+        entityId: id,
+        metadata: { changes: updates, previous: pickPrevious(before as MotherAlarm, updates) },
+      });
+      return normalizeMotherAlarm(data as MotherAlarm);
+    }
+    let updated!: MotherAlarm;
+    updateLocal('mother_alarms', (items) =>
+      items.map((a) => {
+        if (a.id === id) {
+          updated = { ...a, ...updates };
+          return updated;
+        }
+        return a;
+      })
+    );
+    notifyLocalDataChange('mother_hub');
+    return updated;
+  },
+
+  async deleteMotherAlarm(id: string): Promise<void> {
+    if (isSupabaseConfigured) {
+      const { data: snapshot, error: fetchError } = await db()
+        .from('mother_alarms')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (fetchError) throw fetchError;
+      const { error } = await db().from('mother_alarms').delete().eq('id', id);
+      if (error) throw error;
+      await this.logActivity('mother_alarm.delete', {
+        entityType: 'mother_alarm',
+        entityId: id,
+        metadata: { snapshot, title: (snapshot as MotherAlarm).title },
+      });
+      return;
+    }
+    updateLocal('mother_alarms', (items) => items.filter((a) => a.id !== id));
+    notifyLocalDataChange('mother_hub');
+  },
+
+  async restoreMotherAlarm(snapshot: MotherAlarm): Promise<MotherAlarm> {
+    if (isSupabaseConfigured) {
+      const { data, error } = await db().from('mother_alarms').insert(snapshot).select().single();
+      if (error) throw error;
+      await this.logActivity('mother_alarm.create', {
+        entityType: 'mother_alarm',
+        entityId: (data as MotherAlarm).id,
+        metadata: { title: snapshot.title, restored: true },
+      });
+      return normalizeMotherAlarm(data as MotherAlarm);
+    }
+    updateLocal('mother_alarms', (items) => [...items, snapshot]);
+    notifyLocalDataChange('mother_hub');
     return snapshot;
   },
 
@@ -1778,13 +1892,15 @@ function resolveMotherCardImageStore(json: MotherCardImagesJson): MotherCardImag
     }
 
     if (stored.cropped_path && stored.original_path) {
+      const originalUrl = isSupabaseConfigured
+        ? motherHubPublicUrl(stored.original_path)
+        : stored.original_path;
+      const croppedUrl = isSupabaseConfigured
+        ? motherHubPublicUrl(stored.cropped_path)
+        : stored.cropped_path;
       result[side] = {
-        original: isSupabaseConfigured
-          ? motherHubPublicUrl(stored.original_path)
-          : stored.original_path,
-        cropped: isSupabaseConfigured
-          ? motherHubPublicUrl(stored.cropped_path)
-          : stored.cropped_path,
+        original: originalUrl,
+        cropped: croppedUrl,
         zoom: stored.zoom,
         offsetX: stored.offset_x,
         offsetY: stored.offset_y,

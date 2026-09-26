@@ -132,6 +132,21 @@ export interface Reminder {
   created_at: string;
 }
 
+/** 0 = Sunday … 6 = Saturday (matches JavaScript Date#getDay). */
+export type MotherAlarmDay = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export interface MotherAlarm {
+  id: string;
+  title: string;
+  message: string | null;
+  /** Local time in 24h HH:MM. */
+  time_of_day: string;
+  days_of_week: MotherAlarmDay[];
+  active: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface VisitNote {
   id: string;
   author_id: string;

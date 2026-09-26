@@ -7,6 +7,7 @@ export interface LocalDataStore {
   tasks: import('./types').Task[];
   task_assignments: import('./types').TaskAssignment[];
   reminders: import('./types').Reminder[];
+  mother_alarms: import('./types').MotherAlarm[];
   recurring_checks: import('./types').RecurringCheck[];
   recurring_check_completions: import('./types').RecurringCheckCompletion[];
   prescriptions: import('./types').Prescription[];
@@ -158,6 +159,18 @@ function defaultStore(): LocalDataStore {
         created_at: now,
       },
     ],
+    mother_alarms: [
+      {
+        id: crypto.randomUUID(),
+        title: 'Time to get dressed',
+        message: 'Pick out something comfortable for today.',
+        time_of_day: '08:00',
+        days_of_week: [0, 1, 2, 3, 4, 5, 6],
+        active: true,
+        created_by: adminId,
+        created_at: now,
+      },
+    ],
     recurring_checks: [
       {
         id: toiletPaperCheckId,
@@ -259,6 +272,10 @@ export function loadLocalStore(): LocalDataStore {
       }
       if (!parsed.prescriptions) {
         parsed.prescriptions = [];
+        needsSave = true;
+      }
+      if (!parsed.mother_alarms) {
+        parsed.mother_alarms = defaultStore().mother_alarms;
         needsSave = true;
       }
       for (const rx of parsed.prescriptions) {

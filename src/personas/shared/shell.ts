@@ -201,6 +201,7 @@ export function renderAdminShell(content: HTMLElement, activePath: string): void
     { path: '/admin/prescriptions', label: 'Rx Tracker', icon: 'pill' },
     { path: '/admin/calendar', label: 'Calendar', icon: 'calendar' },
     { path: '/admin/reminders', label: 'Reminders', icon: 'bell' },
+    { path: '/admin/alarms', label: 'Alarms', icon: 'clock' },
     { path: '/admin/visits', label: 'Visit Notes', icon: 'file-text' },
     { path: '/admin/documents', label: 'Documents', icon: 'folder' },
     { path: '/admin/users', label: 'Users', icon: 'users' },

@@ -693,6 +693,10 @@
     min-width: 28rem;
   }
 
+  .card-table-row--admin-alarm {
+    min-width: 32rem;
+  }
+
   .card-table-row--caregiver-task {
     min-width: 30rem;
   }
@@ -1683,24 +1687,58 @@
 
 .admin-rx-table,
 .admin-check-table,
-.admin-reminder-table {
+.admin-reminder-table,
+.admin-alarm-table {
   padding: 0.65rem 1rem 0.75rem;
 }
 
 .admin-check-list .card-table-row,
-.admin-reminder-list .card-table-row {
+.admin-reminder-list .card-table-row,
+.admin-alarm-list .card-table-row {
   padding: 0.45rem 0;
 }
 
 .admin-check-row:hover,
-.admin-reminder-row:hover {
+.admin-reminder-row:hover,
+.admin-alarm-row:hover {
   background: #fffaf3;
 }
 
 .admin-check-row .card-table-actions .btn,
-.admin-reminder-row .card-table-actions .btn {
+.admin-reminder-row .card-table-actions .btn,
+.admin-alarm-row .card-table-actions .btn {
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
+}
+
+.alarm-day-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.alarm-day-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.alarm-day-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.alarm-day-chip:has(input:checked) {
+  background: var(--color-primary-soft, #fff4e6);
+  border-color: var(--color-primary, #c45c26);
+  font-weight: 600;
 }
 
 .admin-check-stock-actions {
