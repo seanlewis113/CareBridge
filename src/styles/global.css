@@ -615,6 +615,16 @@ button, input, select, textarea {
   gap: 0.35rem 0.75rem;
 }
 
+.card-table-row--admin-rx {
+  grid-template-columns: minmax(8rem, 1.6fr) minmax(6rem, 1fr) minmax(9rem, 1.25fr) 6.5rem 9rem;
+  gap: 0.35rem 0.75rem;
+  align-items: center;
+}
+
+.card-table-row--admin-rx > * {
+  min-width: 0;
+}
+
 .card-table-label {
   font-weight: 700;
   color: var(--color-text-muted);

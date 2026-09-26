@@ -672,8 +672,17 @@
     -webkit-overflow-scrolling: touch;
   }
 
+  .admin-rx-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .card-table-row--admin-task {
     min-width: 36rem;
+  }
+
+  .card-table-row--admin-rx {
+    min-width: 34rem;
   }
 
   .card-table-row--caregiver-task {
@@ -1648,6 +1657,59 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.admin-rx-table {
+  padding: 0.65rem 1rem 0.75rem;
+}
+
+.admin-rx-list .card-table-row {
+  padding: 0.45rem 0;
+}
+
+.admin-rx-row {
+  cursor: pointer;
+}
+
+.admin-rx-row:hover {
+  background: #fffaf3;
+}
+
+.admin-rx-row .card-table-actions .btn {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.admin-rx-dosage {
+  font-size: 0.88rem;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.admin-rx-refill-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.admin-rx-refill-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.88rem;
+  min-width: 0;
+}
+
+.admin-rx-refill-hint {
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.admin-rx-inactive-badge {
+  align-self: flex-start;
+  background: #eee;
+  font-size: 0.72rem;
 }
 
 .prescriptions-section {

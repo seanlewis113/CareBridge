@@ -44,15 +44,11 @@ export async function renderAdminPrescriptions(): Promise<void> {
     )
   );
 
-  const list = el('div', {});
   if (prescriptions.length === 0) {
-    list.append(el('p', { className: 'empty-state' }, 'No prescriptions yet.'));
+    content.append(el('p', { className: 'empty-state' }, 'No prescriptions yet.'));
   } else {
-    for (const rx of prescriptions) {
-      list.append(renderPrescriptionCard(rx, () => renderAdminPrescriptions()));
-    }
+    content.append(renderPrescriptionsTable(prescriptions, () => renderAdminPrescriptions()));
   }
-  content.append(list);
 
   renderAdminShell(content, '/admin/prescriptions');
 
@@ -68,70 +64,92 @@ function formatRxDetails(rx: Prescription): string {
   return parts.join(' · ');
 }
 
-function renderPrescriptionCard(rx: Prescription, refresh: () => void): HTMLElement {
-  const meta = el('div', { style: 'margin-top:0.35rem' });
-  if (!rx.active) {
-    meta.append(el('span', { className: 'badge', style: 'background:#eee' }, 'Inactive'));
+function renderPrescriptionsTable(
+  prescriptions: Prescription[],
+  refresh: () => void | Promise<void>
+): HTMLElement {
+  const body = el('div', { className: 'admin-rx-list card-table-body' });
+  for (const rx of prescriptions) {
+    body.append(renderPrescriptionRow(rx, refresh));
   }
-  meta.append(
-    el('p', { style: 'margin:0.35rem 0 0;font-weight:500;color:var(--color-primary)' }, formatRxDetails(rx))
+
+  return el('div', { className: 'card admin-rx-table' },
+    el('div', { className: 'card-table' },
+      el('div', { className: 'card-table-header' },
+        el('div', { className: 'card-table-row card-table-row--admin-rx' },
+          el('span', { className: 'card-table-label' }, 'Medication'),
+          el('span', { className: 'card-table-label' }, 'Dosage'),
+          el('span', { className: 'card-table-label' }, 'Next refill'),
+          el('span', { className: 'card-table-label' }, 'Last filled'),
+          el('span', { className: 'card-table-label' }, '')
+        )
+      ),
+      body
+    )
   );
+}
+
+function renderPrescriptionRow(rx: Prescription, refresh: () => void | Promise<void>): HTMLElement {
+  const nameCell = el('span', { className: 'admin-task-title' }, rx.name);
   if (rx.instructions) {
-    meta.append(
-      el('p', { style: 'margin:0.25rem 0 0;color:var(--color-text-muted);font-size:0.95rem' },
-        rx.instructions
-      )
+    nameCell.append(
+      el('span', { className: 'admin-task-checklist-hint card-table-muted' }, rx.instructions)
     );
   }
   if (rx.prescriber) {
-    meta.append(
-      el('p', { style: 'margin:0.25rem 0 0;color:var(--color-text-muted);font-size:0.9rem' },
-        `Prescriber: ${rx.prescriber}`
-      )
+    nameCell.append(
+      el('span', { className: 'admin-task-checklist-hint card-table-muted' }, rx.prescriber)
     );
   }
-  if (rx.active) {
-    meta.append(
-      el('div', { style: 'display:flex;align-items:center;gap:0.5rem;margin:0.35rem 0 0;flex-wrap:wrap' },
-        prescriptionRefillBadge(rx.next_refill_date ?? null),
-        el('span', { className: 'recurring-check-last', style: 'margin:0' },
-          prescriptionRefillLabel(rx.next_refill_date ?? null)
-        )
-      )
-    );
-    if (rx.last_refill_date) {
-      meta.append(
-        el('p', { style: 'margin:0.25rem 0 0;color:var(--color-text-muted);font-size:0.9rem' },
-          `Last filled ${formatDate(rx.last_refill_date)}`
-        )
-      );
-    }
+  if (!rx.active) {
+    nameCell.append(el('span', { className: 'badge admin-rx-inactive-badge' }, 'Inactive'));
   }
 
-  const card = el('div', { className: 'card', style: 'margin-bottom:0.75rem' },
-    el('div', {},
-      el('p', { style: 'margin:0;font-size:1.05rem;font-weight:600' }, rx.name),
-      meta
-    ),
-    el('div', { className: 'task-actions' },
-      el('button', { className: 'btn btn-secondary', type: 'button' }, 'Edit'),
-      el('button', { className: 'btn btn-danger', type: 'button' }, 'Delete')
+  const nextRefillCell = el('span', { className: 'admin-rx-refill-cell' },
+    prescriptionRefillBadge(rx.next_refill_date ?? null),
+    el('span', { className: 'admin-rx-refill-detail' },
+      rx.next_refill_date
+        ? formatDate(rx.next_refill_date)
+        : el('span', { className: 'card-table-muted' }, '—'),
+      el('span', { className: 'card-table-muted admin-rx-refill-hint' },
+        prescriptionRefillLabel(rx.next_refill_date ?? null)
+      )
     )
   );
 
-  card.querySelector('.btn-secondary')?.addEventListener('click', () => {
+  const editBtn = el('button', { className: 'btn btn-secondary', type: 'button' }, 'Edit');
+  const deleteBtn = el('button', { className: 'btn btn-danger', type: 'button' }, 'Delete');
+  editBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     const form = createPrescriptionForm(async () => { close(); await refresh(); }, rx);
     const close = showModal('Edit Prescription', form);
   });
-
-  card.querySelector('.btn-danger')?.addEventListener('click', async () => {
+  deleteBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
     if (await confirmDialog(`Delete ${rx.name}?`)) {
       await api.deletePrescription(rx.id);
       await refresh();
     }
   });
 
-  return card;
+  const row = el('div', { className: 'admin-rx-row card-table-row card-table-row--admin-rx' },
+    nameCell,
+    el('span', { className: 'admin-rx-dosage' }, formatRxDetails(rx)),
+    nextRefillCell,
+    el('span', {},
+      rx.last_refill_date
+        ? formatDate(rx.last_refill_date)
+        : el('span', { className: 'card-table-muted' }, '—')
+    ),
+    el('span', { className: 'card-table-actions' }, editBtn, deleteBtn)
+  );
+
+  row.addEventListener('click', () => {
+    const form = createPrescriptionForm(async () => { close(); await refresh(); }, rx);
+    const close = showModal('Edit Prescription', form);
+  });
+
+  return row;
 }
 
 function createPrescriptionForm(onSuccess: () => void, existing?: Prescription): HTMLElement {
