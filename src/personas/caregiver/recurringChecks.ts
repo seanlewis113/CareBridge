@@ -1,5 +1,10 @@
 import { api } from '../../shared/api';
 import { getSession } from '../../shared/auth';
+import {
+  RECURRING_CHECK_STOCK_OPTIONS,
+  stockLevelBadge,
+  stockLevelLabel,
+} from '../../shared/recurringCheckStock';
 import { el, emptyState, formatDate, daysSinceLabel } from '../../shared/utils';
 import { icon } from '../../shared/icons';
 import { navigate } from '../../shared/router';
@@ -31,7 +36,7 @@ export async function renderRecurringChecksSection(
   section.append(
     el('h2', { className: 'section-title' }, icon('list'), 'Recurring Checks'),
     el('p', { className: 'section-hint' },
-      'Verify these on every visit — mark complete so the family knows when each was last checked.'
+      'Verify these on every visit — choose Full, Low, or Out so the family knows current stock.'
     )
   );
 
@@ -83,15 +88,16 @@ function renderCompactRecurringChecks(
   }
 
   const grid = el('div', {
-    className: `caregiver-dash-check-grid${readOnly ? ' caregiver-dash-check-grid--readonly' : ''}`,
+    className: `caregiver-dash-check-grid caregiver-dash-check-grid--stock${readOnly ? ' caregiver-dash-check-grid--readonly' : ''}`,
   });
   grid.append(
     el('div', { className: 'caregiver-dash-check-row caregiver-dash-check-row--head' },
       el('span', { className: 'caregiver-dash-check-col-check' }, 'Check'),
+      el('span', { className: 'caregiver-dash-check-col-stock' }, 'Stock'),
       el('span', { className: 'caregiver-dash-check-col-date' }, 'Last checked'),
       el('span', { className: 'caregiver-dash-check-col-by' }, 'By'),
       el('span', { className: 'caregiver-dash-check-col-days' }, 'Days ago'),
-      readOnly ? null : el('span', { className: 'caregiver-dash-check-col-action' }, '')
+      readOnly ? null : el('span', { className: 'caregiver-dash-check-col-action' }, 'Update')
     )
   );
   for (const check of checks.slice(0, max)) {
@@ -109,26 +115,22 @@ function renderCompactRecurringCheckRow(
 ): HTMLElement {
   const completedAt = check.last_completion?.completed_at;
   const who = check.last_completion?.completed_by_profile?.display_name;
+  const stock = check.last_completion?.stock_level;
 
   let actionCell: HTMLElement | null = null;
   if (!readOnly) {
-    const completeBtn = el('button', { className: 'btn btn-primary btn-sm', type: 'button' }, 'Mark Checked');
-    completeBtn.addEventListener('click', async () => {
-      if (!profileId) return;
-      completeBtn.disabled = true;
-      try {
-        await api.completeRecurringCheck(check.id, profileId);
-        await refresh();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : 'Could not record check');
-        completeBtn.disabled = false;
-      }
-    });
-    actionCell = el('span', { className: 'caregiver-dash-check-col-action' }, completeBtn);
+    actionCell = el('span', { className: 'caregiver-dash-check-col-action' },
+      createStockLevelButtons(check.id, profileId, refresh, 'sm')
+    );
   }
 
   return el('div', { className: 'caregiver-dash-check-row' },
     el('span', { className: 'caregiver-dash-check-col-check caregiver-dash-check-title' }, check.title),
+    el('span', { className: 'caregiver-dash-check-col-stock' },
+      stock
+        ? stockLevelBadge(stock)
+        : el('span', { className: 'caregiver-dash-check-warn' }, '—')
+    ),
     el('span', { className: 'caregiver-dash-check-col-date' },
       completedAt
         ? formatDate(completedAt)
@@ -165,10 +167,12 @@ function renderRecurringCheckCard(
   if (check.last_completion) {
     const who = check.last_completion.completed_by_profile?.display_name ?? 'Someone';
     const completedAt = check.last_completion.completed_at;
+    const stock = check.last_completion.stock_level;
     body.append(
       el('p', { className: 'recurring-check-last' },
-        `Last checked ${formatDate(completedAt)} by ${who} (${daysSinceLabel(completedAt)})`
-      )
+        `Stock: ${stockLevelLabel(stock)} · Last checked ${formatDate(completedAt)} by ${who} (${daysSinceLabel(completedAt)})`
+      ),
+      stockLevelBadge(stock)
     );
   } else {
     body.append(el('p', { className: 'recurring-check-last recurring-check-never' }, 'Not yet checked'));
@@ -176,26 +180,44 @@ function renderRecurringCheckCard(
 
   const card = el('div', { className: 'card task-card caregiver-task-card recurring-check-card' }, header, body);
 
-  const actions = el('div', { className: 'task-actions caregiver-task-actions' });
-  const completeBtn = el(
-    'button',
-    { className: 'btn btn-primary', type: 'button' },
-    icon('check-circle'),
-    'Mark checked'
+  const actions = el('div', { className: 'task-actions caregiver-task-actions recurring-check-stock-actions' });
+  actions.append(
+    el('span', { className: 'recurring-check-stock-actions-label' }, 'Current stock:'),
+    createStockLevelButtons(check.id, profileId, refresh)
   );
-  completeBtn.addEventListener('click', async () => {
-    if (!profileId) return;
-    completeBtn.disabled = true;
-    try {
-      await api.completeRecurringCheck(check.id, profileId);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not record check');
-      completeBtn.disabled = false;
-    }
-  });
-  actions.append(completeBtn);
   card.append(actions);
 
   return card;
+}
+
+function createStockLevelButtons(
+  checkId: string,
+  profileId: string | undefined,
+  refresh: () => void | Promise<void>,
+  size: 'sm' | 'md' = 'md'
+): HTMLElement {
+  const wrap = el('div', { className: `stock-level-buttons stock-level-buttons--${size}` });
+  for (const opt of RECURRING_CHECK_STOCK_OPTIONS) {
+    const btn = el(
+      'button',
+      {
+        type: 'button',
+        className: `btn stock-level-btn stock-level-btn--${opt.value}${size === 'sm' ? ' btn-sm' : ''}`,
+      },
+      opt.label
+    );
+    btn.addEventListener('click', async () => {
+      if (!profileId) return;
+      wrap.querySelectorAll('button').forEach((b) => { (b as HTMLButtonElement).disabled = true; });
+      try {
+        await api.completeRecurringCheck(checkId, profileId, opt.value);
+        await refresh();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : 'Could not record check');
+        wrap.querySelectorAll('button').forEach((b) => { (b as HTMLButtonElement).disabled = false; });
+      }
+    });
+    wrap.append(btn);
+  }
+  return wrap;
 }

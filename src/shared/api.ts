@@ -16,6 +16,7 @@ import type {
   Reminder,
   RecurringCheck,
   RecurringCheckCompletion,
+  RecurringCheckStockLevel,
   RecurringCheckWithStatus,
   Prescription,
   PrescriptionDose,
@@ -87,6 +88,16 @@ export function isRecurringChecksSchemaReady(): boolean {
 
 export function isPrescriptionsSchemaReady(): boolean {
   return prescriptionsSchemaReady;
+}
+
+function normalizeRecurringCheckCompletion(
+  completion: RecurringCheckCompletion
+): RecurringCheckCompletion {
+  const level = completion.stock_level;
+  if (level === 'full' || level === 'low' || level === 'out') {
+    return completion;
+  }
+  return { ...completion, stock_level: 'full' };
 }
 
 function isMissingDbTableError(error: unknown, tableHint?: string): boolean {
@@ -796,7 +807,10 @@ export const api = {
       const completions = data as RecurringCheckCompletion[];
       return visible.map((check) => {
         const last = completions.find((c) => c.check_id === check.id);
-        return { ...check, last_completion: last ?? null };
+        return {
+          ...check,
+          last_completion: last ? normalizeRecurringCheckCompletion(last) : null,
+        };
       });
     }
 
@@ -809,10 +823,10 @@ export const api = {
       return {
         ...check,
         last_completion: last
-          ? {
+          ? normalizeRecurringCheckCompletion({
               ...last,
               completed_by_profile: profiles.find((p) => p.id === last.completed_by),
-            }
+            })
           : null,
       };
     });
@@ -924,6 +938,7 @@ export const api = {
   async completeRecurringCheck(
     checkId: string,
     profileId: string,
+    stockLevel: RecurringCheckStockLevel,
     notes?: string | null
   ): Promise<RecurringCheckCompletion> {
     const completion: RecurringCheckCompletion = {
@@ -932,6 +947,7 @@ export const api = {
       completed_by: profileId,
       completed_at: new Date().toISOString(),
       notes: notes ?? null,
+      stock_level: stockLevel,
     };
     if (isSupabaseConfigured) {
       const { data, error } = await db()
@@ -943,7 +959,7 @@ export const api = {
       await this.logActivity('recurring_check.complete', {
         entityType: 'recurring_check',
         entityId: checkId,
-        metadata: { completed_by: profileId },
+        metadata: { completed_by: profileId, stock_level: stockLevel },
       });
       return data as RecurringCheckCompletion;
     }

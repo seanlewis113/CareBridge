@@ -518,7 +518,8 @@ CREATE TABLE IF NOT EXISTS recurring_check_completions (
   check_id UUID NOT NULL REFERENCES recurring_checks(id) ON DELETE CASCADE,
   completed_by UUID NOT NULL REFERENCES profiles(id),
   completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  notes TEXT
+  notes TEXT,
+  stock_level TEXT NOT NULL DEFAULT 'full' CHECK (stock_level IN ('full', 'low', 'out'))
 );
 
 CREATE INDEX IF NOT EXISTS recurring_check_completions_check_id_idx

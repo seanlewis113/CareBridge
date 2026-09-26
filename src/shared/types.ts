@@ -90,12 +90,15 @@ export interface RecurringCheck {
   created_at: string;
 }
 
+export type RecurringCheckStockLevel = 'full' | 'low' | 'out';
+
 export interface RecurringCheckCompletion {
   id: string;
   check_id: string;
   completed_by: string;
   completed_at: string;
   notes: string | null;
+  stock_level: RecurringCheckStockLevel;
   completed_by_profile?: Profile;
 }
 

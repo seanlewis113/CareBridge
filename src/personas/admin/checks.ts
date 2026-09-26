@@ -2,6 +2,7 @@ import { api, isRecurringChecksSchemaReady } from '../../shared/api';
 import { getSession } from '../../shared/auth';
 import { renderAdminShell } from '../shared/shell';
 import { el, showModal, confirmDialog, formatDateTime } from '../../shared/utils';
+import { stockLevelBadge } from '../../shared/recurringCheckStock';
 import type { RecurringCheck, RecurringCheckWithStatus } from '../../shared/types';
 
 export async function renderAdminChecks(): Promise<void> {
@@ -37,7 +38,7 @@ export async function renderAdminChecks(): Promise<void> {
       el('button', { className: 'btn btn-primary', type: 'button', id: 'new-check' }, '+ New Check')
     ),
     el('p', { style: 'color:var(--color-text-muted);margin-bottom:1rem' },
-      'Checks caregivers see on every visit — staples, supplies, and routine verifications. Last-checked times update when a caregiver marks one complete.'
+      'Checks caregivers see on every visit — staples, supplies, and routine verifications. Caregivers log Full, Low, or Out when they check each item.'
     )
   );
 
@@ -71,8 +72,11 @@ function renderCheckCard(
   if (lastCompletion) {
     const who = lastCompletion.completed_by_profile?.display_name ?? 'Someone';
     meta.append(
-      el('p', { className: 'recurring-check-last', style: 'margin:0.35rem 0 0' },
-        `Last checked ${formatDateTime(lastCompletion.completed_at)} by ${who}`
+      el('div', { style: 'display:flex;align-items:center;gap:0.5rem;margin-top:0.35rem;flex-wrap:wrap' },
+        stockLevelBadge(lastCompletion.stock_level),
+        el('p', { className: 'recurring-check-last', style: 'margin:0' },
+          `Last checked ${formatDateTime(lastCompletion.completed_at)} by ${who}`
+        )
       )
     );
   } else if (check.active) {
