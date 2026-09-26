@@ -70,6 +70,7 @@ const MOTHER_HUB_TABLES = [
   'calendar_events',
   'reminders',
   'financial_accounts',
+  'app_settings',
 ] as const;
 
 const TASK_TABLES = [

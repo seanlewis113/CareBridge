@@ -1,3 +1,5 @@
+import type { MotherCardImagesJson } from './motherCardImages';
+
 export type Persona = 'mother' | 'admin' | 'family_caregiver' | 'hired_caregiver';
 
 export interface Profile {
@@ -192,6 +194,7 @@ export interface AppSettings {
   text_scale: number;
   google_calendar_id: string | null;
   google_refresh_token: string | null;
+  mother_card_images?: MotherCardImagesJson;
 }
 
 export interface SessionState {

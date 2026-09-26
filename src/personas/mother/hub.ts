@@ -15,26 +15,14 @@ import { el, greeting, formatDate, formatCurrency, showModal, timeOfDayClass, sh
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm, openEventEditorModal } from './add-event';
 import { ensureMotherHubRealtime, teardownMotherHubRealtime } from '../../shared/realtime';
+import type { MotherCardImageConfig, MotherCardSide } from '../../shared/motherCardImages';
 import type { CalendarEvent, Transaction } from '../../shared/types';
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let idleCleanup: (() => void) | null = null;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
-const CARD_IMAGE_STORAGE_KEY = 'moms-care-mother-card-images';
 const CARD_PREVIEW_WIDTH = 600;
 const CARD_PREVIEW_HEIGHT = 325;
-
-type CardSide = 'front' | 'back';
-
-interface CardImageConfig {
-  original: string;
-  cropped: string;
-  zoom: number;
-  offsetX: number;
-  offsetY: number;
-}
-
-type CardImageStore = Partial<Record<CardSide, CardImageConfig>>;
 
 export async function renderMotherHub(): Promise<void> {
   const app = document.getElementById('app')!;
@@ -51,12 +39,13 @@ export async function renderMotherHub(): Promise<void> {
   layout.append(skeleton);
   app.replaceChildren(layout);
 
-  const [settings, events, reminders, accounts, hubTransactions] = await Promise.all([
+  const [settings, events, reminders, accounts, hubTransactions, cardImages] = await Promise.all([
     api.getSettings(),
     api.getCalendarEvents(nowIso),
     api.getReminders(),
     api.getFinancialAccounts(),
     api.getMotherHubTransactions(),
+    api.getMotherCardImages(),
   ]);
 
   const chimeAccount = accounts.find(
@@ -117,7 +106,12 @@ export async function renderMotherHub(): Promise<void> {
             )
           ),
           el('div', { className: 'mother-card-images' },
-            createCardSlot('front', 'Front of card')
+            createCardSlot(
+              'front',
+              'Front of card',
+              cardImages.front,
+              (config) => api.saveMotherCardImage('front', config)
+            )
           )
         ),
         el('div', { className: 'mother-balance-right' },
@@ -275,7 +269,12 @@ function createTileHeader(iconName: IconName, title: string): HTMLElement {
   );
 }
 
-function createCardSlot(side: CardSide, label: string): HTMLElement {
+function createCardSlot(
+  _side: MotherCardSide,
+  label: string,
+  saved: MotherCardImageConfig | undefined,
+  saveImage: (config: MotherCardImageConfig) => Promise<void>
+): HTMLElement {
   const wrapper = el('div', { className: 'mother-card-slot-wrap' });
   const slotButton = el('button', {
     type: 'button',
@@ -289,7 +288,6 @@ function createCardSlot(side: CardSide, label: string): HTMLElement {
     className: 'mother-card-file-input',
   }) as HTMLInputElement;
 
-  const saved = readCardImageStore()[side];
   renderCardSlotContent(slotButton, saved, label);
 
   slotButton.addEventListener('click', () => input.click());
@@ -301,9 +299,7 @@ function createCardSlot(side: CardSide, label: string): HTMLElement {
       const cropResult = await showCardCropDialog(originalDataUrl, label);
       if (!cropResult) return;
 
-      const store = readCardImageStore();
-      store[side] = cropResult;
-      writeCardImageStore(store);
+      await saveImage(cropResult);
       renderCardSlotContent(slotButton, cropResult, label);
       showToast(`${label} image updated`, 'success');
     } catch {
@@ -317,27 +313,13 @@ function createCardSlot(side: CardSide, label: string): HTMLElement {
   return wrapper;
 }
 
-function renderCardSlotContent(container: HTMLElement, config: CardImageConfig | undefined, label: string): void {
+function renderCardSlotContent(container: HTMLElement, config: MotherCardImageConfig | undefined, label: string): void {
   container.replaceChildren();
   if (!config) {
     container.append(el('span', { className: 'mother-card-slot-label' }, label));
     return;
   }
   container.append(el('img', { src: config.cropped, alt: label }));
-}
-
-function readCardImageStore(): CardImageStore {
-  try {
-    const raw = localStorage.getItem(CARD_IMAGE_STORAGE_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw) as CardImageStore;
-  } catch {
-    return {};
-  }
-}
-
-function writeCardImageStore(store: CardImageStore): void {
-  localStorage.setItem(CARD_IMAGE_STORAGE_KEY, JSON.stringify(store));
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -401,7 +383,7 @@ function calculateCropLayout(
   return { drawX, drawY, drawWidth, drawHeight, maxPanX, maxPanY };
 }
 
-async function showCardCropDialog(originalSrc: string, label: string): Promise<CardImageConfig | null> {
+async function showCardCropDialog(originalSrc: string, label: string): Promise<MotherCardImageConfig | null> {
   const form = el('form', { className: 'mother-card-crop-form modal-body' });
   const previewViewport = el('div', { className: 'mother-card-crop-preview' }) as HTMLDivElement;
   const previewImage = el('img', { src: originalSrc, alt: `${label} preview` }) as HTMLImageElement;

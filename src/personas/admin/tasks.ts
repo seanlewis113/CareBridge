@@ -6,7 +6,7 @@ import { el, formatDate, showModal, confirmDialog } from '../../shared/utils';
 import { PERSONA_LABELS, type Task, type Profile, type Persona, type TaskAssignment } from '../../shared/types';
 import { getTaskAssigneeIds } from '../../shared/taskAssignments';
 
-type TaskFlagFilter = 'all' | 'open_slot' | 'visit' | 'mom_hub';
+type TaskFlagFilter = 'all' | 'open_slot' | 'visit';
 type TaskSortKey = 'title' | 'status' | 'assigned' | 'due' | 'created';
 
 const TASK_STATUSES: Task['status'][] = ['pending', 'in_progress', 'completed'];
@@ -176,8 +176,7 @@ function renderTaskToolbar(
   const flag = el('select', { className: 'admin-task-filter-select', 'aria-label': 'Filter by flag' },
     el('option', { value: 'all' }, 'All flags'),
     el('option', { value: 'open_slot' }, 'Open slot'),
-    el('option', { value: 'visit' }, 'Visit'),
-    el('option', { value: 'mom_hub' }, 'Mom hub')
+    el('option', { value: 'visit' }, 'Visit')
   ) as HTMLSelectElement;
   flag.value = state.flag;
   flag.addEventListener('change', () => onChange({ flag: flag.value as TaskFlagFilter }));
@@ -252,7 +251,6 @@ function filterTasks(
 
     if (state.flag === 'open_slot' && !task.open_slot) return false;
     if (state.flag === 'visit' && !task.visit_specific) return false;
-    if (state.flag === 'mom_hub' && !task.show_on_mother_hub) return false;
 
     if (query) {
       const haystack = `${task.title} ${task.description ?? ''}`.toLowerCase();
@@ -352,7 +350,6 @@ function renderTaskRow(
   const flagBadges = el('div', { className: 'task-row-flag-badges' });
   if (task.open_slot) flagBadges.append(el('span', { className: 'badge badge-pending' }, 'Open slot'));
   if (task.visit_specific) flagBadges.append(el('span', { className: 'badge task-badge-visit' }, 'Visit'));
-  if (task.show_on_mother_hub) flagBadges.append(el('span', { className: 'badge badge-completed' }, 'Mom hub'));
   if (flagBadges.childElementCount === 0) {
     flagBadges.append(el('span', { className: 'card-table-muted' }, '—'));
   }
@@ -426,7 +423,6 @@ function createTaskForm(
   const optionsGroup = el('div', { className: 'task-form-options' },
     toggleField('Visit-specific task', 'task-visit', existing?.visit_specific ?? false),
     toggleField('Open slot (anyone can claim)', 'task-open', existing?.open_slot ?? false),
-    toggleField('Show on mother dashboard', 'task-mother-hub', existing?.show_on_mother_hub !== false),
   );
   const dueFieldsRow = el(
     'div',
@@ -446,7 +442,7 @@ function createTaskForm(
     el('label', { for: 'task-assign' }, 'Assign to'),
     el('button', { type: 'button', id: 'task-assign-toggle', className: 'caregiver-select-toggle' }, 'Select people'),
     el('div', { id: 'task-assign-menu', className: 'caregiver-select-menu', hidden: 'true' }),
-    el('small', { className: 'input-hint' }, 'Choose one or more people. Their names appear on Mom\'s dashboard.')
+    el('small', { className: 'input-hint' }, 'Choose one or more people to work on this task.')
   );
   const assignToggle = assignGroup.querySelector('#task-assign-toggle') as HTMLButtonElement;
   const assignMenu = assignGroup.querySelector('#task-assign-menu') as HTMLDivElement;
@@ -527,12 +523,6 @@ function createTaskForm(
     const title = val('task-title');
     const dueDate = val('task-due-date');
     const dueTime = val('task-due-time');
-    const showOnMotherHub = checked('task-mother-hub');    const isOpenSlot = checked('task-open');
-
-    if (showOnMotherHub && !isOpenSlot && selectedCaregiverIds.size === 0) {      errorEl.textContent = 'Assign this task to someone, mark it as an open slot, or turn off "Show on mother dashboard".';
-      errorEl.style.display = 'block';
-      return;
-    }
     const checklistText = val('task-checklist');
     const checklist = checklistText
       .split('\n')
@@ -548,7 +538,7 @@ function createTaskForm(
         : null,
       visit_specific: checked('task-visit'),
       open_slot: checked('task-open'),
-      show_on_mother_hub: checked('task-mother-hub'),
+      show_on_mother_hub: false,
       status: existing?.status ?? 'pending' as const,
       checklist,
       created_by: session.profile?.id ?? null,

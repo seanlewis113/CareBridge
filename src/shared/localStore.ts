@@ -65,6 +65,7 @@ function defaultStore(): LocalDataStore {
       text_scale: 1,
       google_calendar_id: null,
       google_refresh_token: null,
+      mother_card_images: {},
     },
     calendar_events: [
       {
@@ -244,6 +245,10 @@ export function loadLocalStore(): LocalDataStore {
       }));
       if (!parsed.activity_log) parsed.activity_log = [];
       let needsSave = false;
+      if (!parsed.settings.mother_card_images) {
+        parsed.settings.mother_card_images = {};
+        needsSave = true;
+      }
       if (!parsed.recurring_checks) {
         parsed.recurring_checks = [];
         needsSave = true;

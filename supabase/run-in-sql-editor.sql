@@ -689,3 +689,63 @@ BEGIN
       WITH CHECK (get_my_persona() IN ('family_caregiver', 'hired_caregiver'));
   END IF;
 END $$;
+
+-- Mother hub card images (see migration 20260926140000_mother_hub_card_images.sql)
+ALTER TABLE app_settings
+  ADD COLUMN IF NOT EXISTS mother_card_images JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+DROP FUNCTION IF EXISTS get_mother_hub_settings();
+
+CREATE OR REPLACE FUNCTION get_mother_hub_settings()
+RETURNS TABLE(mother_name TEXT, text_scale REAL, mother_card_images JSONB)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT mother_name, text_scale, mother_card_images
+  FROM app_settings
+  WHERE id = 'default';
+$$;
+
+GRANT EXECUTE ON FUNCTION get_mother_hub_settings TO anon, authenticated;
+
+CREATE OR REPLACE FUNCTION update_mother_card_image_meta(
+  p_side TEXT,
+  p_cropped_path TEXT,
+  p_original_path TEXT,
+  p_zoom REAL,
+  p_offset_x REAL,
+  p_offset_y REAL
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  patch JSONB;
+BEGIN
+  IF p_side NOT IN ('front', 'back') THEN
+    RAISE EXCEPTION 'invalid card side';
+  END IF;
+  patch := jsonb_build_object(
+    'cropped_path', p_cropped_path,
+    'original_path', p_original_path,
+    'zoom', p_zoom,
+    'offset_x', p_offset_x,
+    'offset_y', p_offset_y
+  );
+  UPDATE app_settings
+  SET
+    mother_card_images = COALESCE(mother_card_images, '{}'::jsonb) || jsonb_build_object(p_side, patch),
+    updated_at = NOW()
+  WHERE id = 'default';
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION update_mother_card_image_meta TO anon, authenticated;
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('mother-hub', 'mother-hub', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
