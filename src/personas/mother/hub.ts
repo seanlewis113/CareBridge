@@ -15,7 +15,6 @@ import { el, greeting, formatDate, formatCurrency, showModal, timeOfDayClass, sh
 import { icon, type IconName } from '../../shared/icons';
 import { renderAddEventForm, openEventEditorModal } from './add-event';
 import { ensureMotherHubRealtime, teardownMotherHubRealtime } from '../../shared/realtime';
-import { getAreaAssigneeIds } from '../../shared/responsibilityAssignments';
 import type { CalendarEvent, Transaction } from '../../shared/types';
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -52,17 +51,13 @@ export async function renderMotherHub(): Promise<void> {
   layout.append(skeleton);
   app.replaceChildren(layout);
 
-  const [settings, events, reminders, accounts, responsibilityAreas, profiles, responsibilityAssignments, hubTransactions] =
-    await Promise.all([
-      api.getSettings(),
-      api.getCalendarEvents(nowIso),
-      api.getReminders(),
-      api.getFinancialAccounts(),
-      api.getResponsibilityAreas(),
-      api.getProfiles(),
-      api.getResponsibilityAssignments(),
-      api.getMotherHubTransactions(),
-    ]);
+  const [settings, events, reminders, accounts, hubTransactions] = await Promise.all([
+    api.getSettings(),
+    api.getCalendarEvents(nowIso),
+    api.getReminders(),
+    api.getFinancialAccounts(),
+    api.getMotherHubTransactions(),
+  ]);
 
   const chimeAccount = accounts.find(
     (a: import('../../shared/types').FinancialAccount) => a.institution.toLowerCase() === 'chime' && a.display_on_mother_hub
@@ -203,53 +198,6 @@ export async function renderMotherHub(): Promise<void> {
   });
   addEventBtn.addEventListener('click', (event) => event.stopPropagation());
 
-  const responsibleBody = el('div', { className: 'mother-tile-body' });
-  const responsibleTile = el('section', {
-    className: 'mother-tile mother-tile--responsible mother-q-responsible',
-    'aria-label': "Who's responsible",
-  },
-    createTileHeader('briefcase', "Who's Responsible"),
-    responsibleBody
-  );
-
-  const displayAreas = [...responsibilityAreas]
-    .sort((a, b) => a.title.localeCompare(b.title))
-    .slice(0, 4);
-  if (displayAreas.length === 0) {
-    responsibleBody.append(el('p', { className: 'mother-empty-hint' }, 'No care areas assigned yet.'));
-  } else {
-    const list = el('div', { className: 'mother-responsible-list card-table' },
-      el('div', { className: 'card-table-header' },
-        el('div', { className: 'card-table-row card-table-row--responsible' },
-          el('span', {}, ''),
-          el('span', {}, 'Area'),
-          el('span', {}, 'Who')
-        )
-      ),
-      el('div', { className: 'card-table-body' })
-    );
-    const body = list.querySelector('.card-table-body')!;
-    for (const area of displayAreas) {
-      const assigneeIds = getAreaAssigneeIds(area.id, responsibilityAssignments);
-      const assigneeNames = profiles
-        .filter((p) => assigneeIds.includes(p.id))
-        .map((p) => p.display_name);
-      const who = assigneeNames.length > 0 ? assigneeNames.join(', ') : 'Not assigned';
-      const isUnassigned = assigneeNames.length === 0;
-      const avatarLabel = isUnassigned ? '?' : getInitials(assigneeNames[0]);
-      body.append(
-        el('div', { className: 'mother-responsible-item card-table-row card-table-row--responsible' },
-          el('div', { className: `mother-avatar mother-avatar--responsible${isUnassigned ? ' mother-avatar--open' : ''}` },
-            avatarLabel
-          ),
-          el('span', { className: 'mother-responsible-area' }, area.title),
-          el('span', { className: `mother-responsible-who${isUnassigned ? ' mother-responsible-who--open' : ''}` }, who)
-        )
-      );
-    }
-    responsibleBody.append(list);
-  }
-
   const remindersBody = el('div', { className: 'mother-tile-body' });
   const remindersTile = el('section', { className: 'mother-tile mother-tile--remember mother-q-br', 'aria-label': 'Things to remember' },
     createTileHeader('bell', 'Things to Remember'),
@@ -272,7 +220,7 @@ export async function renderMotherHub(): Promise<void> {
     remindersBody.append(list);
   }
 
-  content.append(balanceTile, responsibleTile, eventsTile, remindersTile);
+  content.append(balanceTile, eventsTile, remindersTile);
 
   layout.append(header, content);
   app.replaceChildren(layout);
@@ -624,16 +572,6 @@ async function showCardCropDialog(originalSrc: string, label: string): Promise<C
       }
     });
   });
-}
-
-function getInitials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 }
 
 function resetIdleTimer(): void {

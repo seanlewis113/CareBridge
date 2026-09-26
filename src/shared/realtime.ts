@@ -1,13 +1,13 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 
-export type DataTopic = 'tasks' | 'task_assignments' | 'mother_hub' | 'recurring_checks' | 'responsibility_areas' | 'prescriptions';
+export type DataTopic = 'tasks' | 'task_assignments' | 'mother_hub' | 'recurring_checks' | 'prescriptions';
 
 const localListeners = new Map<DataTopic, Set<() => void>>();
 
 export function notifyLocalDataChange(topic: DataTopic): void {
   localListeners.get(topic)?.forEach((listener) => listener());
-  if (topic === 'tasks' || topic === 'task_assignments' || topic === 'responsibility_areas') {
+  if (topic === 'tasks' || topic === 'task_assignments') {
     localListeners.get('mother_hub')?.forEach((listener) => listener());
   }
 }
@@ -70,8 +70,6 @@ const MOTHER_HUB_TABLES = [
   'calendar_events',
   'reminders',
   'financial_accounts',
-  'responsibility_areas',
-  'responsibility_assignments',
 ] as const;
 
 const TASK_TABLES = [
@@ -79,8 +77,6 @@ const TASK_TABLES = [
   'task_assignments',
   'recurring_checks',
   'recurring_check_completions',
-  'responsibility_areas',
-  'responsibility_assignments',
   'prescriptions',
   'prescription_doses',
 ] as const;
@@ -104,7 +100,6 @@ export function subscribeTaskChanges(onChange: () => void): () => void {
     subscribeLocal('task_assignments', debounced),
     subscribeLocal('recurring_checks', debounced),
     subscribeLocal('prescriptions', debounced),
-    subscribeLocal('responsibility_areas', debounced),
     subscribePostgresTables('task-changes', TASK_TABLES, onChange),
   ];
 

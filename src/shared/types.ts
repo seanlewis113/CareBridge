@@ -128,20 +128,6 @@ export interface PrescriptionWithStatus extends Prescription {
   last_dose: PrescriptionDose | null;
 }
 
-export interface ResponsibilityArea {
-  id: string;
-  title: string;
-  description: string | null;
-  created_by: string | null;
-  created_at: string;
-}
-
-export interface ResponsibilityAssignment {
-  id: string;
-  area_id: string;
-  profile_id: string;
-}
-
 export interface Reminder {
   id: string;
   body: string;

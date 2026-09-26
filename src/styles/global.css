@@ -570,10 +570,6 @@ button, input, select, textarea {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) auto;
 }
 
-.card-table-row--responsible {
-  grid-template-columns: 2.25rem 1fr 1fr;
-}
-
 .card-table-row--events {
   /* Fixed widths so header and body rows share the same column tracks */
   grid-template-columns: 7rem 5.25rem minmax(0, 1fr);
