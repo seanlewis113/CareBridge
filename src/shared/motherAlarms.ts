@@ -31,6 +31,9 @@ let fallbackBeepStep = 0;
 const beepWavDataUrlCache = new Map<number, string>();
 let audioKeepAliveTimer: ReturnType<typeof setInterval> | null = null;
 let motherAlarmAudioUnlocked = false;
+/** Bumped when the alarm overlay closes so async sound retries cannot restart beeps. */
+let alarmSoundEpoch = 0;
+const activeFallbackAudios = new Set<HTMLAudioElement>();
 let sharedAudioContext: AudioContext | null = null;
 let alarmBeepGain: GainNode | null = null;
 let alarmBeepStep = 0;
@@ -309,7 +312,13 @@ function playFallbackBeepOnce(): void {
   fallbackBeepStep += 1;
   const audio = new Audio(beepWavDataUrl(frequency));
   audio.volume = 1;
-  void audio.play().catch(() => undefined);
+  activeFallbackAudios.add(audio);
+  const cleanup = () => activeFallbackAudios.delete(audio);
+  audio.addEventListener('ended', cleanup, { once: true });
+  audio.addEventListener('pause', cleanup, { once: true });
+  void audio.play().catch(() => {
+    cleanup();
+  });
   pulseVibrate();
 }
 
@@ -319,6 +328,11 @@ function stopFallbackBeepsOnly(): void {
     fallbackBeepTimer = null;
   }
   fallbackBeepStep = 0;
+  for (const audio of activeFallbackAudios) {
+    audio.pause();
+    audio.currentTime = 0;
+  }
+  activeFallbackAudios.clear();
 }
 
 function startFallbackAlarmBeeps(): void {
@@ -484,6 +498,8 @@ function updateAlarmSoundHint(overlay: HTMLElement): void {
 function beginAlarmBeeps(): void {
   if (!sharedAudioContext || alarmBeepTimer) return;
 
+  stopFallbackBeepsOnly();
+
   const gain = sharedAudioContext.createGain();
   gain.gain.value = ALARM_GAIN;
   gain.connect(sharedAudioContext.destination);
@@ -503,6 +519,7 @@ function beginAlarmBeeps(): void {
 
 function startAlarmSound(overlay?: HTMLElement): void {
   if (alarmBeepTimer && isAlarmSoundActive()) return;
+  stopFallbackBeepsOnly();
   stopAlarmBeepsOnly();
   unlockMotherAlarmAudio();
 
@@ -530,13 +547,20 @@ function startAlarmSound(overlay?: HTMLElement): void {
   }
 }
 
-async function retryAlarmSound(overlay: HTMLElement): Promise<void> {
+async function retryAlarmSound(overlay: HTMLElement, epoch: number): Promise<void> {
+  if (epoch !== alarmSoundEpoch) return;
   await unlockMotherAlarmAudioAsync();
+  if (epoch !== alarmSoundEpoch) return;
   stopFallbackBeepsOnly();
   startAlarmSound(overlay);
   await new Promise((resolve) => setTimeout(resolve, 280));
+  if (epoch !== alarmSoundEpoch) return;
   if (!isAlarmSoundActive()) {
     startFallbackAlarmBeeps();
+  }
+  if (epoch !== alarmSoundEpoch) {
+    stopFallbackBeepsOnly();
+    return;
   }
   updateAlarmSoundHint(overlay);
 }
@@ -558,6 +582,7 @@ function disposeMotherAlarmAudio(): void {
 }
 
 function removeOverlay(): void {
+  alarmSoundEpoch += 1;
   clearAlarmAutoStopTimer();
   clearAlarmSoundRetryTimer();
   clearAlarmSoundHealthTimer();
@@ -565,6 +590,9 @@ function removeOverlay(): void {
   activeOverlay = null;
   showingAlarmId = null;
   stopAlarmSound();
+  if (typeof navigator.vibrate === 'function') {
+    navigator.vibrate(0);
+  }
   document.body.classList.remove('mother-alarm-open');
 }
 
@@ -573,6 +601,7 @@ function showAlarmOverlay(alarm: MotherAlarm): void {
 
   removeOverlay();
   showingAlarmId = alarm.id;
+  const soundEpoch = alarmSoundEpoch;
 
   const overlay = el('div', {
     className: 'mother-alarm-overlay',
@@ -601,27 +630,32 @@ function showAlarmOverlay(alarm: MotherAlarm): void {
 
   pingMotherAlarmAudioKeepAlive();
   void unlockMotherAlarmAudioAsync().then(() => {
-    if (activeOverlay !== overlay) return;
+    if (activeOverlay !== overlay || soundEpoch !== alarmSoundEpoch) return;
     startAlarmSound(overlay);
-    window.setTimeout(() => updateAlarmSoundHint(overlay), 450);
+    window.setTimeout(() => {
+      if (activeOverlay !== overlay || soundEpoch !== alarmSoundEpoch) return;
+      updateAlarmSoundHint(overlay);
+    }, 450);
   });
 
-  const retrySound = () => {
-    void retryAlarmSound(overlay);
+  const retrySound = (event: Event) => {
+    if ((event.target as HTMLElement | null)?.closest('#mother-alarm-ok')) return;
+    void retryAlarmSound(overlay, soundEpoch);
   };
 
   overlay.addEventListener('pointerdown', retrySound, { capture: true });
   alarmSoundRetryTimer = setInterval(() => {
+    if (activeOverlay !== overlay || soundEpoch !== alarmSoundEpoch) return;
     if (isAlarmSoundActive()) {
       updateAlarmSoundHint(overlay);
       return;
     }
-    void retryAlarmSound(overlay);
+    void retryAlarmSound(overlay, soundEpoch);
   }, 900);
 
   clearAlarmSoundHealthTimer();
   alarmSoundHealthTimer = setInterval(() => {
-    if (activeOverlay !== overlay) return;
+    if (activeOverlay !== overlay || soundEpoch !== alarmSoundEpoch) return;
     if (alarmBeepTimer && sharedAudioContext && sharedAudioContext.state !== 'running') {
       stopAlarmBeepsOnly();
     }
@@ -637,7 +671,7 @@ function showAlarmOverlay(alarm: MotherAlarm): void {
   const okBtn = panel.querySelector('#mother-alarm-ok');
   okBtn?.addEventListener('click', () => {
     if (!isAlarmSoundActive()) {
-      void retryAlarmSound(overlay);
+      void retryAlarmSound(overlay, soundEpoch);
       return;
     }
     dismiss();
