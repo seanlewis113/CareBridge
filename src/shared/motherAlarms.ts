@@ -18,6 +18,8 @@ let alarmWakeTimer: ReturnType<typeof setTimeout> | null = null;
 let visibilityCleanup: (() => void) | null = null;
 
 let alarms: MotherAlarm[] = [];
+/** Last seen schedule per alarm id — used to clear dismiss when admin edits time/days. */
+const alarmScheduleById = new Map<string, string>();
 let serviceStarted = false;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 let alarmBeepTimer: ReturnType<typeof setInterval> | null = null;
@@ -42,29 +44,76 @@ function canShowMotherAlarms(): boolean {
   return motherHubAlarmSurfaceActive && getCurrentRoute() === MOTHER_HUB_ROUTE;
 }
 
-function readDismissed(): Record<string, string> {
+function alarmScheduleKey(alarm: Pick<MotherAlarm, 'time_of_day' | 'days_of_week'>): string {
+  const days = [...alarm.days_of_week].sort((a, b) => a - b).join(',');
+  return `${alarm.time_of_day}|${days}`;
+}
+
+interface AlarmDismissRecord {
+  date: string;
+  schedule: string;
+}
+
+type StoredDismiss = AlarmDismissRecord | string;
+
+function readDismissed(): Record<string, StoredDismiss> {
   try {
     const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
     if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, string>;
+    const parsed = JSON.parse(raw) as Record<string, StoredDismiss>;
     return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
     return {};
   }
 }
 
-function writeDismissed(map: Record<string, string>): void {
+function writeDismissed(map: Record<string, StoredDismiss>): void {
   localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(map));
 }
 
-function isDismissedToday(alarmId: string): boolean {
-  return readDismissed()[alarmId] === todayISO();
+function isDismissedToday(alarm: MotherAlarm): boolean {
+  const raw = readDismissed()[alarm.id];
+  if (!raw) return false;
+  const today = todayISO();
+  const schedule = alarmScheduleKey(alarm);
+  if (typeof raw === 'string') {
+    // Legacy date-only entries cannot represent a edited schedule — do not block.
+    return false;
+  }
+  return raw.date === today && raw.schedule === schedule;
 }
 
-function markDismissedToday(alarmId: string): void {
+function markDismissedToday(alarm: MotherAlarm): void {
   const map = readDismissed();
-  map[alarmId] = todayISO();
+  map[alarm.id] = { date: todayISO(), schedule: alarmScheduleKey(alarm) };
   writeDismissed(map);
+}
+
+function syncDismissalsWithAlarmSchedules(activeAlarms: MotherAlarm[]): void {
+  const map = readDismissed();
+  let changed = false;
+  const today = todayISO();
+
+  for (const alarm of activeAlarms) {
+    const schedule = alarmScheduleKey(alarm);
+    const prevSchedule = alarmScheduleById.get(alarm.id);
+    if (prevSchedule !== undefined && prevSchedule !== schedule) {
+      if (alarm.id in map) {
+        delete map[alarm.id];
+        changed = true;
+      }
+    }
+    alarmScheduleById.set(alarm.id, schedule);
+
+    const raw = map[alarm.id];
+    if (!raw || typeof raw === 'string') continue;
+    if (raw.date === today && raw.schedule !== schedule) {
+      delete map[alarm.id];
+      changed = true;
+    }
+  }
+
+  if (changed) writeDismissed(map);
 }
 
 function parseTimeMinutes(timeOfDay: string): number {
@@ -97,7 +146,7 @@ function shouldFire(alarm: MotherAlarm, now: Date): boolean {
   if (!alarm.days_of_week.includes(now.getDay() as MotherAlarm['days_of_week'][number])) {
     return false;
   }
-  if (isDismissedToday(alarm.id)) return false;
+  if (isDismissedToday(alarm)) return false;
   const nowMinutes = localNowMinutes(now);
   return nowMinutes >= parseTimeMinutes(alarm.time_of_day);
 }
@@ -210,7 +259,7 @@ function msUntilNextAlarmFire(now: Date): number | null {
   for (const alarm of alarms) {
     if (!alarm.active) continue;
     if (!alarm.days_of_week.includes(day)) continue;
-    if (isDismissedToday(alarm.id)) continue;
+    if (isDismissedToday(alarm)) continue;
     const alarmMinutes = parseTimeMinutes(alarm.time_of_day);
     if (alarmMinutes <= nowMinutes) continue;
     const ms = (alarmMinutes - nowMinutes) * 60 * 1000 - msIntoMinute;
@@ -408,7 +457,7 @@ function showAlarmOverlay(alarm: MotherAlarm): void {
   alarmSoundRetryTimer = setInterval(retrySound, 900);
 
   const dismiss = () => {
-    markDismissedToday(alarm.id);
+    markDismissedToday(alarm);
     removeOverlay();
     void checkAlarms();
   };
@@ -438,7 +487,9 @@ function checkAlarms(): void {
 }
 
 export function setMotherAlarmList(list: MotherAlarm[]): void {
-  alarms = list.filter((a) => a.active);
+  const active = list.filter((a) => a.active);
+  syncDismissalsWithAlarmSchedules(active);
+  alarms = active;
   if (showingAlarmId) {
     const current = alarms.find((a) => a.id === showingAlarmId);
     const now = new Date();
@@ -482,4 +533,5 @@ export function teardownMotherAlarmService(): void {
   removeOverlay();
   disposeMotherAlarmAudio();
   alarms = [];
+  alarmScheduleById.clear();
 }
