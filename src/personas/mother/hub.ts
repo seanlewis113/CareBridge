@@ -32,7 +32,6 @@ const CARD_PREVIEW_HEIGHT = 325;
 
 export async function renderMotherHub(): Promise<void> {
   const renderToken = ++hubRenderToken;
-  setMotherHubAlarmSurfaceActive(false);
 
   const app = document.getElementById('app')!;
   app.className = 'mother-app';

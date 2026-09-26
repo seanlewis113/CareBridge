@@ -14,6 +14,8 @@ const ALARM_GAIN = 0.28;
 const ALARM_MAX_DURATION_MS = 3 * 60 * 1000;
 
 let alarmAutoStopTimer: ReturnType<typeof setTimeout> | null = null;
+let alarmWakeTimer: ReturnType<typeof setTimeout> | null = null;
+let visibilityCleanup: (() => void) | null = null;
 
 let alarms: MotherAlarm[] = [];
 let serviceStarted = false;
@@ -96,7 +98,7 @@ function shouldFire(alarm: MotherAlarm, now: Date): boolean {
     return false;
   }
   if (isDismissedToday(alarm.id)) return false;
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const nowMinutes = localNowMinutes(now);
   return nowMinutes >= parseTimeMinutes(alarm.time_of_day);
 }
 
@@ -181,6 +183,92 @@ function clearAlarmAutoStopTimer(): void {
     clearTimeout(alarmAutoStopTimer);
     alarmAutoStopTimer = null;
   }
+}
+
+function clearAlarmWakeTimer(): void {
+  if (alarmWakeTimer) {
+    clearTimeout(alarmWakeTimer);
+    alarmWakeTimer = null;
+  }
+}
+
+function localNowMinutes(now: Date): number {
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function msUntilNextMinuteBoundary(now: Date): number {
+  return Math.max(250, (60 - now.getSeconds()) * 1000 - now.getMilliseconds());
+}
+
+/** Soonest future fire time today for an active, not-yet-due alarm (local clock). */
+function msUntilNextAlarmFire(now: Date): number | null {
+  const day = now.getDay() as MotherAlarm['days_of_week'][number];
+  const nowMinutes = localNowMinutes(now);
+  const msIntoMinute = now.getSeconds() * 1000 + now.getMilliseconds();
+  let soonest: number | null = null;
+
+  for (const alarm of alarms) {
+    if (!alarm.active) continue;
+    if (!alarm.days_of_week.includes(day)) continue;
+    if (isDismissedToday(alarm.id)) continue;
+    const alarmMinutes = parseTimeMinutes(alarm.time_of_day);
+    if (alarmMinutes <= nowMinutes) continue;
+    const ms = (alarmMinutes - nowMinutes) * 60 * 1000 - msIntoMinute;
+    if (soonest === null || ms < soonest) soonest = ms;
+  }
+
+  return soonest;
+}
+
+function scheduleNextAlarmCheck(): void {
+  clearAlarmWakeTimer();
+  if (!canShowMotherAlarms()) return;
+
+  const now = new Date();
+  const candidates = [msUntilNextMinuteBoundary(now), msUntilNextAlarmFire(now), TICK_MS]
+    .filter((ms): ms is number => ms != null);
+  const delay = Math.min(...candidates);
+
+  alarmWakeTimer = setTimeout(() => {
+    checkAlarms();
+    scheduleNextAlarmCheck();
+  }, delay);
+}
+
+async function refreshMotherAlarmsFromServer(): Promise<void> {
+  if (!canShowMotherAlarms()) return;
+  try {
+    const list = await api.getMotherAlarms();
+    if (!canShowMotherAlarms()) return;
+    setMotherAlarmList(list);
+  } catch (err) {
+    console.warn('Could not refresh mother alarms:', err);
+  }
+}
+
+function installMotherAlarmWakeHandlers(): void {
+  visibilityCleanup?.();
+  const onResume = () => {
+    if (document.visibilityState === 'hidden') return;
+    if (!canShowMotherAlarms()) return;
+    void refreshMotherAlarmsFromServer();
+    checkAlarms();
+    scheduleNextAlarmCheck();
+  };
+  document.addEventListener('visibilitychange', onResume);
+  window.addEventListener('focus', onResume);
+  window.addEventListener('pageshow', onResume);
+  visibilityCleanup = () => {
+    document.removeEventListener('visibilitychange', onResume);
+    window.removeEventListener('focus', onResume);
+    window.removeEventListener('pageshow', onResume);
+  };
+}
+
+function teardownMotherAlarmWakeHandlers(): void {
+  visibilityCleanup?.();
+  visibilityCleanup = null;
+  clearAlarmWakeTimer();
 }
 
 function stopAlarmBeepsOnly(): void {
@@ -340,13 +428,13 @@ function pickNextAlarm(now: Date): MotherAlarm | null {
 
 function checkAlarms(): void {
   if (!canShowMotherAlarms()) {
-    if (activeOverlay) removeOverlay();
     return;
   }
   const now = new Date();
   if (showingAlarmId && activeOverlay) return;
   const next = pickNextAlarm(now);
   if (next) showAlarmOverlay(next);
+  scheduleNextAlarmCheck();
 }
 
 export function setMotherAlarmList(list: MotherAlarm[]): void {
@@ -365,6 +453,7 @@ export async function ensureMotherAlarmService(): Promise<void> {
   if (!canShowMotherAlarms()) return;
 
   installMotherHubAlarmAudioUnlock();
+  installMotherAlarmWakeHandlers();
 
   if (!serviceStarted) {
     serviceStarted = true;
@@ -377,12 +466,14 @@ export async function ensureMotherAlarmService(): Promise<void> {
   } catch (err) {
     console.warn('Could not load mother alarms:', err);
     alarms = [];
+    scheduleNextAlarmCheck();
   }
 }
 
 export function teardownMotherAlarmService(): void {
   motherHubAlarmSurfaceActive = false;
   teardownMotherHubAlarmAudioUnlock();
+  teardownMotherAlarmWakeHandlers();
   serviceStarted = false;
   if (tickTimer) {
     clearInterval(tickTimer);

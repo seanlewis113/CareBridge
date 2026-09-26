@@ -118,10 +118,13 @@ function normalizeRecurringCheckCompletion(
 }
 
 function normalizeMotherAlarm(alarm: MotherAlarm): MotherAlarm {
-  const days = Array.isArray(alarm.days_of_week)
-    ? [...alarm.days_of_week].sort((a, b) => a - b)
-    : [0, 1, 2, 3, 4, 5, 6];
-  return { ...alarm, days_of_week: days as MotherAlarm['days_of_week'] };
+  const rawDays = Array.isArray(alarm.days_of_week) ? alarm.days_of_week : [0, 1, 2, 3, 4, 5, 6];
+  const days = [...rawDays]
+    .map((d) => Number(d))
+    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+    .sort((a, b) => a - b) as MotherAlarm['days_of_week'];
+  const daysOfWeek = days.length > 0 ? days : ([0, 1, 2, 3, 4, 5, 6] as MotherAlarm['days_of_week']);
+  return { ...alarm, days_of_week: daysOfWeek };
 }
 
 function isMissingDbTableError(error: unknown, tableHint?: string): boolean {
