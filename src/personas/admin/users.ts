@@ -22,7 +22,7 @@ export async function renderAdminUsers(): Promise<void> {
         : null
     ),
     el('p', { style: 'color:var(--color-text-muted);margin-bottom:1.5rem;font-size:0.95rem' },
-      'Add family members and admins. They\'ll get an email link to activate their account — no Supabase dashboard needed.'
+      'Add family members and admins. They\'ll get an email with a link to activate their account and choose a password.'
     )
   );
 
@@ -136,7 +136,7 @@ function createUserForm(onSuccess: () => void): HTMLElement {
       )
     ),
     el('p', { style: 'font-size:0.85rem;color:var(--color-text-muted);margin-bottom:0.75rem' },
-      'They\'ll receive an email with a link to set up their account.'
+      'They\'ll receive an email with a link. After they open it, the app will ask them to set a password for future sign-ins.'
     ),
     el('p', { id: 'user-form-status', style: 'font-size:0.9rem;margin-bottom:0.75rem' }),
     el('button', { className: 'btn btn-primary', type: 'submit' }, 'Send Invite')

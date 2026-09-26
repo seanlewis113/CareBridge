@@ -5,10 +5,11 @@ import './styles/calendar.css';
 import './styles/mother.css';
 import './styles/admin.css';
 
-import { initRouter, registerRoute, navigate, getCurrentRoute, showBootError } from './shared/router';
-import { isAdmin, isAdminProfile, isAuthenticated, isCaregiver, isMother, isMotherPinVerified, handleAuthSignedOut, getSession, signOut } from './shared/auth';
+import { initRouter, registerRoute, navigate, getCurrentRoute, showBootError, getBootRoutePath, personaHome } from './shared/router';
+import { isAdmin, isAdminProfile, isAuthenticated, isCaregiver, isMother, isMotherPinVerified, handleAuthSignedOut, getSession, signOut, bootstrapSupabaseSessionFromUrl, syncAppSessionWithSupabaseAuth, resolvePostAuthRoutePath, supabaseUserNeedsPasswordSetup, refreshSessionFromSupabase, SETUP_PASSWORD_PATH } from './shared/auth';
 import { isSupabaseConfigured, getSupabase } from './shared/supabase';
 import { renderLanding, renderModuleSelect } from './personas/landing';
+import { renderSetupPassword } from './personas/setup-password';
 import { renderMotherHub, teardownMotherHub } from './personas/mother/hub';
 import { teardownTaskRealtime } from './shared/realtime';
 import { renderAdminDashboard } from './personas/admin/dashboard';
@@ -120,6 +121,27 @@ function registerRoutes(): void {
   registerRoute('/select', async () => {
     if (!(await guardModuleSelect())) return;
     await renderModuleSelect();
+  });
+
+  registerRoute(SETUP_PASSWORD_PATH, async () => {
+    if (!isSupabaseConfigured) {
+      await navigate('/');
+      return;
+    }
+    const { data } = await getSupabase().auth.getSession();
+    const user = data.session?.user;
+    if (!user) {
+      await navigate('/');
+      return;
+    }
+    if (!supabaseUserNeedsPasswordSetup(user)) {
+      await refreshSessionFromSupabase();
+      const profile = getSession().profile;
+      await navigate(profile ? personaHome(profile.persona) : '/');
+      return;
+    }
+    await syncAppSessionWithSupabaseAuth(true);
+    await renderSetupPassword();
   });
 
   registerRoute('/mother', async () => {
@@ -261,12 +283,38 @@ function registerRoutes(): void {
 function initAuthListener(): void {
   if (!isSupabaseConfigured) return;
 
-  getSupabase().auth.onAuthStateChange((event) => {
+  getSupabase().auth.onAuthStateChange((event, authSession) => {
     if (event === 'SIGNED_OUT') {
       handleAuthSignedOut();
       if (getCurrentRoute() !== '/') {
         navigate('/');
       }
+      return;
+    }
+
+    if (event === 'SIGNED_IN' && authSession?.user) {
+      void (async () => {
+        await syncAppSessionWithSupabaseAuth(true);
+        if (supabaseUserNeedsPasswordSetup(authSession.user)) {
+          if (getCurrentRoute() !== SETUP_PASSWORD_PATH) {
+            await navigate(SETUP_PASSWORD_PATH);
+          }
+          return;
+        }
+        const redirect = await resolvePostAuthRoutePath();
+        if (!redirect) return;
+        const route = getCurrentRoute();
+        const wrongAdminView = route.startsWith('/admin') && !isAdminProfile();
+        const wrongCaregiverView = route.startsWith('/caregiver') && !isCaregiver();
+        if (
+          route === '/'
+          || route === SETUP_PASSWORD_PATH
+          || wrongAdminView
+          || wrongCaregiverView
+        ) {
+          await navigate(redirect);
+        }
+      })();
     }
   });
 }
@@ -303,11 +351,25 @@ async function init(): Promise<void> {
     registerSW({ immediate: true });
   }
 
-  const path = getCurrentRoute();
-  if (path === '/google-callback' || window.location.pathname.includes('google-callback')) {
+  let bootPath = getBootRoutePath();
+
+  if (isSupabaseConfigured) {
+    try {
+      const fromAuthCallback = await bootstrapSupabaseSessionFromUrl();
+      if (fromAuthCallback) {
+        await syncAppSessionWithSupabaseAuth(true);
+        const postAuth = await resolvePostAuthRoutePath();
+        if (postAuth) bootPath = postAuth;
+      }
+    } catch (err) {
+      console.warn('Auth callback handling failed:', err);
+    }
+  }
+
+  if (bootPath === '/google-callback' || window.location.pathname.includes('google-callback')) {
     await navigate('/google-callback');
   } else {
-    await navigate(path || '/');
+    await navigate(bootPath || '/');
   }
 
   // Clear one-time stale recovery lock only after boot succeeds.

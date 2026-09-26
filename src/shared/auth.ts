@@ -1,3 +1,4 @@
+import type { User } from '@supabase/supabase-js';
 import type { Persona, Profile, SessionState } from './types';
 import { api, setActivityContext } from './api';
 import { isSupabaseConfigured, getSupabase } from './supabase';
@@ -65,6 +66,105 @@ export function getSession(): SessionState {
 export function subscribeSession(listener: SessionListener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+export const SETUP_PASSWORD_PATH = '/setup-password';
+
+export function supabaseUserNeedsPasswordSetup(user: User | null | undefined): boolean {
+  return user?.user_metadata?.needs_password_setup === true;
+}
+
+function isImplicitAuthHash(): boolean {
+  const hash = window.location.hash.slice(1);
+  return hash.includes('access_token=') || hash.includes('refresh_token=');
+}
+
+/** Parse Supabase auth callback (PKCE ?code= or legacy hash tokens) before app routing clobbers the URL. */
+export async function bootstrapSupabaseSessionFromUrl(): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+
+  const supabase = getSupabase();
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+    const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+    return true;
+  }
+
+  if (isImplicitAuthHash()) {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    if (data.session) {
+      window.history.replaceState({}, document.title, `${window.location.pathname}#/`);
+      return true;
+    }
+  }
+
+  await supabase.auth.getSession();
+  return false;
+}
+
+/** Align app sessionStorage profile with the current Supabase auth user (e.g. after magic link). */
+export async function syncAppSessionWithSupabaseAuth(force = false): Promise<Profile | null> {
+  if (!isSupabaseConfigured) return null;
+
+  const { data } = await getSupabase().auth.getSession();
+  const user = data.session?.user;
+  if (!user) return null;
+
+  const current = getSession().profile;
+  if (!force && current?.id === user.id) return current;
+
+  return refreshSessionFromSupabase();
+}
+
+export async function completeInvitedUserPasswordSetup(password: string): Promise<void> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Password setup requires Supabase.');
+  }
+
+  const supabase = getSupabase();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  const user = userData.user;
+  if (!user) throw new Error('Not signed in.');
+
+  const metadata = { ...(user.user_metadata ?? {}), needs_password_setup: false };
+  const { error } = await supabase.auth.updateUser({ password, data: metadata });
+  if (error) throw error;
+
+  await api.logActivity('auth.password_set', { metadata: { profile_id: user.id } });
+}
+
+export async function resolvePostAuthRoutePath(): Promise<string | null> {
+  if (!isSupabaseConfigured) return null;
+
+  const { data } = await getSupabase().auth.getSession();
+  const user = data.session?.user;
+  if (!user) return null;
+
+  if (supabaseUserNeedsPasswordSetup(user)) {
+    return SETUP_PASSWORD_PATH;
+  }
+
+  const profile = getSession().profile ?? (await refreshSessionFromSupabase());
+  if (!profile) return '/';
+
+  switch (profile.persona) {
+    case 'mother':
+      return '/mother';
+    case 'admin':
+      return '/admin';
+    case 'family_caregiver':
+    case 'hired_caregiver':
+      return '/caregiver';
+    default:
+      return '/';
+  }
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<Profile | null> {
@@ -138,6 +238,7 @@ export async function inviteUserByAdmin(
       data: {
         display_name: displayName.trim(),
         persona,
+        needs_password_setup: true,
       },
     },
   });

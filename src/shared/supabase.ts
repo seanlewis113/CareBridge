@@ -8,7 +8,13 @@ export const isSupabaseConfigured =
   Boolean(supabaseUrl && supabaseAnonKey && !supabaseUrl.includes('your-project'));
 
 export const supabase: SupabaseClient<Database> | null = isSupabaseConfigured
-  ? createClient<Database>(supabaseUrl!, supabaseAnonKey!)
+  ? createClient<Database>(supabaseUrl!, supabaseAnonKey!, {
+      auth: {
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+        persistSession: true,
+      },
+    })
   : null;
 
 export function getSupabase(): SupabaseClient<Database> {

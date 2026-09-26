@@ -23,9 +23,20 @@ export function registerRoute(path: string, handler: RouteHandler): void {
   routes.set(path, handler);
 }
 
+function isAuthTokenHash(hashBody: string): boolean {
+  return hashBody.includes('access_token=') || hashBody.includes('refresh_token=');
+}
+
 function getPathFromHash(): string {
   const hash = window.location.hash.slice(1);
-  return hash || '/';
+  if (!hash || isAuthTokenHash(hash)) return '/';
+  return hash.startsWith('/') ? hash : `/${hash}`;
+}
+
+/** Route path for first paint — avoids treating Supabase implicit hash tokens as a route. */
+export function getBootRoutePath(): string {
+  if (window.location.pathname.includes('google-callback')) return '/google-callback';
+  return getPathFromHash();
 }
 
 function updateBodyAppClass(path: string): void {

@@ -8,6 +8,9 @@ import {
   signOut,
   getSession,
   refreshSessionFromSupabase,
+  syncAppSessionWithSupabaseAuth,
+  supabaseUserNeedsPasswordSetup,
+  SETUP_PASSWORD_PATH,
   isAdminProfile,
   isAuthenticated,
   isMotherPinVerified,
@@ -16,7 +19,7 @@ import {
 import { navigate, personaHome, MODULE_SELECT_PATH } from '../shared/router';
 import { el } from '../shared/utils';
 import { icon } from '../shared/icons';
-import { isSupabaseConfigured } from '../shared/supabase';
+import { isSupabaseConfigured, getSupabase } from '../shared/supabase';
 import { promptMotherPin } from '../shared/pin';
 
 const PERSONA_CONFIG: { persona: Persona; iconName: 'home' | 'settings' | 'users' | 'briefcase'; desc: string }[] = [
@@ -30,9 +33,22 @@ export async function renderLanding(): Promise<void> {
   const app = document.getElementById('app')!;
   let session = getSession();
 
-  if (!session.persona && isSupabaseConfigured) {
-    await refreshSessionFromSupabase();
-    session = getSession();
+  if (isSupabaseConfigured) {
+    const { data } = await getSupabase().auth.getSession();
+    const supabaseUser = data.session?.user;
+    if (supabaseUser) {
+      if (session.profile?.id !== supabaseUser.id || !session.profile) {
+        await syncAppSessionWithSupabaseAuth(true);
+        session = getSession();
+      }
+      if (supabaseUserNeedsPasswordSetup(supabaseUser)) {
+        await navigate(SETUP_PASSWORD_PATH);
+        return;
+      }
+    } else if (!session.persona) {
+      await refreshSessionFromSupabase();
+      session = getSession();
+    }
   }
 
   if (session.persona && (session.persona !== 'mother' || isMotherPinVerified())) {
@@ -59,7 +75,7 @@ export async function renderLanding(): Promise<void> {
   if (isSupabaseConfigured) {
     loginCard.append(
       el('p', { className: 'login-card-hint' },
-        'Accounts are created by your family admin. Sign in with the email and password they provided.'
+        'Family admins invite you by email. Open the link they send, set a password once, then sign in here anytime.'
       ),
       createEmailLoginForm()
     );
