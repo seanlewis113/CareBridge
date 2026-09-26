@@ -128,15 +128,15 @@ body:has(.mother-app) {
   min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: repeat(6, 1fr);
+  grid-template-rows: repeat(4, 1fr);
   gap: var(--mother-gap);
   padding: var(--mother-gap);
   overflow: hidden;
 }
 
 .mother-q-tl { grid-column: 1; grid-row: 1 / span 2; }
-.mother-q-ml { grid-column: 1; grid-row: 3 / span 4; }
-.mother-q-br { grid-column: 2; grid-row: 1 / span 6; }
+.mother-q-ml { grid-column: 1; grid-row: 3 / span 2; }
+.mother-q-br { grid-column: 2; grid-row: 1 / span 4; }
 
 /* Infographic tiles — color-coded themes */
 .mother-tile {
