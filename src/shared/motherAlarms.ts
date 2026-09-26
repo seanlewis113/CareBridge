@@ -12,6 +12,7 @@ const ALARM_BEEP_MS = 320;
 const ALARM_PAUSE_MS = 140;
 const ALARM_GAIN = 0.28;
 const ALARM_MAX_DURATION_MS = 3 * 60 * 1000;
+const AUDIO_KEEPALIVE_MS = 12_000;
 
 let alarmAutoStopTimer: ReturnType<typeof setTimeout> | null = null;
 let alarmWakeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -28,6 +29,8 @@ let alarmSoundHealthTimer: ReturnType<typeof setInterval> | null = null;
 let fallbackBeepTimer: ReturnType<typeof setInterval> | null = null;
 let fallbackBeepStep = 0;
 const beepWavDataUrlCache = new Map<number, string>();
+let audioKeepAliveTimer: ReturnType<typeof setInterval> | null = null;
+let motherAlarmAudioUnlocked = false;
 let sharedAudioContext: AudioContext | null = null;
 let alarmBeepGain: GainNode | null = null;
 let alarmBeepStep = 0;
@@ -184,9 +187,51 @@ function unlockMotherAlarmAudioAsync(): Promise<void> {
     source.buffer = buffer;
     source.connect(ctx.destination);
     source.start(0);
-    return ctx.resume().then(() => undefined).catch(() => undefined);
+    return ctx.resume().then(() => {
+      motherAlarmAudioUnlocked = true;
+      startMotherAlarmAudioKeepAlive();
+    }).catch(() => undefined);
   } catch {
     return Promise.resolve();
+  }
+}
+
+function pingMotherAlarmAudioKeepAlive(): void {
+  if (!motherAlarmAudioUnlocked || !sharedAudioContext) return;
+  try {
+    const ctx = sharedAudioContext;
+    if (ctx.state === 'closed') {
+      sharedAudioContext = null;
+      motherAlarmAudioUnlocked = false;
+      stopMotherAlarmAudioKeepAlive();
+      return;
+    }
+    void ctx.resume().then(() => {
+      if (ctx.state !== 'running') return;
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+    });
+  } catch {
+    // Ignore — overlay still shows.
+  }
+}
+
+function startMotherAlarmAudioKeepAlive(): void {
+  stopMotherAlarmAudioKeepAlive();
+  if (!motherAlarmAudioUnlocked) return;
+  pingMotherAlarmAudioKeepAlive();
+  audioKeepAliveTimer = setInterval(() => {
+    pingMotherAlarmAudioKeepAlive();
+  }, AUDIO_KEEPALIVE_MS);
+}
+
+function stopMotherAlarmAudioKeepAlive(): void {
+  if (audioKeepAliveTimer) {
+    clearInterval(audioKeepAliveTimer);
+    audioKeepAliveTimer = null;
   }
 }
 
@@ -554,8 +599,12 @@ function showAlarmOverlay(alarm: MotherAlarm): void {
   document.body.classList.add('mother-alarm-open');
   activeOverlay = overlay;
 
-  startAlarmSound(overlay);
-  window.setTimeout(() => updateAlarmSoundHint(overlay), 450);
+  pingMotherAlarmAudioKeepAlive();
+  void unlockMotherAlarmAudioAsync().then(() => {
+    if (activeOverlay !== overlay) return;
+    startAlarmSound(overlay);
+    window.setTimeout(() => updateAlarmSoundHint(overlay), 450);
+  });
 
   const retrySound = () => {
     void retryAlarmSound(overlay);
@@ -585,7 +634,14 @@ function showAlarmOverlay(alarm: MotherAlarm): void {
     void checkAlarms();
   };
 
-  panel.querySelector('#mother-alarm-ok')?.addEventListener('click', dismiss);
+  const okBtn = panel.querySelector('#mother-alarm-ok');
+  okBtn?.addEventListener('click', () => {
+    if (!isAlarmSoundActive()) {
+      void retryAlarmSound(overlay);
+      return;
+    }
+    dismiss();
+  });
 
   clearAlarmAutoStopTimer();
   alarmAutoStopTimer = setTimeout(dismiss, ALARM_MAX_DURATION_MS);
@@ -601,6 +657,9 @@ function pickNextAlarm(now: Date): MotherAlarm | null {
 function checkAlarms(): void {
   if (!canShowMotherAlarms()) {
     return;
+  }
+  if (!showingAlarmId) {
+    pingMotherAlarmAudioKeepAlive();
   }
   const now = new Date();
   if (showingAlarmId && activeOverlay) return;
@@ -628,6 +687,9 @@ export async function ensureMotherAlarmService(): Promise<void> {
 
   installMotherHubAlarmAudioUnlock();
   installMotherAlarmWakeHandlers();
+  if (motherAlarmAudioUnlocked) {
+    startMotherAlarmAudioKeepAlive();
+  }
 
   if (!serviceStarted) {
     serviceStarted = true;
@@ -648,6 +710,8 @@ export function teardownMotherAlarmService(): void {
   motherHubAlarmSurfaceActive = false;
   teardownMotherHubAlarmAudioUnlock();
   teardownMotherAlarmWakeHandlers();
+  stopMotherAlarmAudioKeepAlive();
+  motherAlarmAudioUnlocked = false;
   serviceStarted = false;
   if (tickTimer) {
     clearInterval(tickTimer);
