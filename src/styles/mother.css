@@ -1002,3 +1002,10 @@ body.mother-alarm-open {
   font-weight: 700;
   border-radius: 999px;
 }
+
+.mother-alarm-sound-hint {
+  margin: 0 0 1rem;
+  font-size: calc(1rem * var(--text-scale, 1));
+  font-weight: 600;
+  color: #9a3412;
+}

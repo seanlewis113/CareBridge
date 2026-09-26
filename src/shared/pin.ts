@@ -1,4 +1,5 @@
 import { api } from './api';
+import { unlockMotherAlarmAudio } from './motherAlarms';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 import { el, showModal } from './utils';
 
@@ -146,6 +147,7 @@ function promptPin(
       inputs[nextIndex]?.focus();
 
       if (inputs.every((item) => item.value.length === 1)) {
+        unlockMotherAlarmAudio();
         void trySubmit();
       }
     };
@@ -169,6 +171,7 @@ function promptPin(
           inputs[index + 1].focus();
         }
         if (inputs.every((item) => item.value.length === 1)) {
+          unlockMotherAlarmAudio();
           void trySubmit();
         }
       });

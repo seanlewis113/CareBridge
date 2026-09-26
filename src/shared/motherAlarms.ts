@@ -16,9 +16,12 @@ let alarms: MotherAlarm[] = [];
 let serviceStarted = false;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 let alarmBeepTimer: ReturnType<typeof setInterval> | null = null;
-let alarmAudioContext: AudioContext | null = null;
-let alarmGainNode: GainNode | null = null;
+let alarmSoundRetryTimer: ReturnType<typeof setInterval> | null = null;
+let sharedAudioContext: AudioContext | null = null;
+let alarmBeepGain: GainNode | null = null;
 let alarmBeepStep = 0;
+let audioUnlockCleanup: (() => void) | null = null;
+let alarmSoundHint: HTMLElement | null = null;
 let activeOverlay: HTMLElement | null = null;
 let showingAlarmId: string | null = null;
 let motherHubAlarmSurfaceActive = false;
@@ -94,59 +97,168 @@ function shouldFire(alarm: MotherAlarm, now: Date): boolean {
   return nowMinutes >= parseTimeMinutes(alarm.time_of_day);
 }
 
+function getAudioContextClass(): typeof AudioContext | null {
+  const w = window as Window & { webkitAudioContext?: typeof AudioContext };
+  return window.AudioContext ?? w.webkitAudioContext ?? null;
+}
+
+/** Call during a user gesture (PIN tap, hub touch) so scheduled alarms can play sound later. */
+export function unlockMotherAlarmAudio(): void {
+  try {
+    const AudioCtx = getAudioContextClass();
+    if (!AudioCtx) return;
+
+    if (!sharedAudioContext) {
+      sharedAudioContext = new AudioCtx();
+    }
+
+    const ctx = sharedAudioContext;
+    const buffer = ctx.createBuffer(1, 1, 22050);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+    void ctx.resume();
+  } catch {
+    // Ignore — alarm UI still shows.
+  }
+}
+
+export function installMotherHubAlarmAudioUnlock(): void {
+  audioUnlockCleanup?.();
+  const onGesture = () => unlockMotherAlarmAudio();
+  const opts: AddEventListenerOptions = { capture: true, passive: true };
+  document.addEventListener('pointerdown', onGesture, opts);
+  document.addEventListener('touchstart', onGesture, opts);
+  document.addEventListener('keydown', onGesture, opts);
+  audioUnlockCleanup = () => {
+    document.removeEventListener('pointerdown', onGesture, opts);
+    document.removeEventListener('touchstart', onGesture, opts);
+    document.removeEventListener('keydown', onGesture, opts);
+  };
+}
+
+function teardownMotherHubAlarmAudioUnlock(): void {
+  audioUnlockCleanup?.();
+  audioUnlockCleanup = null;
+}
+
+function isAlarmSoundActive(): boolean {
+  return !!alarmBeepTimer && sharedAudioContext?.state === 'running';
+}
+
 function playAlarmBeep(frequency: number): void {
-  if (!alarmAudioContext || !alarmGainNode) return;
-  const ctx = alarmAudioContext;
+  if (!sharedAudioContext || !alarmBeepGain) return;
+  const ctx = sharedAudioContext;
   const osc = ctx.createOscillator();
   osc.type = 'square';
   osc.frequency.value = frequency;
-  osc.connect(alarmGainNode);
+  osc.connect(alarmBeepGain);
   const start = ctx.currentTime;
   const duration = ALARM_BEEP_MS / 1000;
   osc.start(start);
   osc.stop(start + duration);
 }
 
-function startAlarmSound(): void {
-  stopAlarmSound();
-  try {
-    const ctx = new AudioContext();
-    const gain = ctx.createGain();
-    gain.gain.value = ALARM_GAIN;
-    gain.connect(ctx.destination);
-    alarmAudioContext = ctx;
-    alarmGainNode = gain;
-    alarmBeepStep = 0;
-
-    const runBeep = () => {
-      const frequencies = [880, 698, 880, 523];
-      playAlarmBeep(frequencies[alarmBeepStep % frequencies.length]);
-      alarmBeepStep += 1;
-    };
-
-    void ctx.resume().then(() => {
-      runBeep();
-      alarmBeepTimer = setInterval(runBeep, ALARM_BEEP_MS + ALARM_PAUSE_MS);
-    });
-  } catch {
-    // Audio may be blocked until user interaction; alarm UI still shows.
+function pulseVibrate(): void {
+  if (typeof navigator.vibrate === 'function') {
+    navigator.vibrate([280, 120, 280, 120, 280]);
   }
 }
 
-function stopAlarmSound(): void {
+function clearAlarmSoundRetryTimer(): void {
+  if (alarmSoundRetryTimer) {
+    clearInterval(alarmSoundRetryTimer);
+    alarmSoundRetryTimer = null;
+  }
+}
+
+function stopAlarmBeepsOnly(): void {
   if (alarmBeepTimer) {
     clearInterval(alarmBeepTimer);
     alarmBeepTimer = null;
   }
-  if (alarmAudioContext) {
-    void alarmAudioContext.close();
-    alarmAudioContext = null;
-  }
-  alarmGainNode = null;
+  alarmBeepGain?.disconnect();
+  alarmBeepGain = null;
   alarmBeepStep = 0;
+  alarmSoundHint?.remove();
+  alarmSoundHint = null;
+}
+
+function updateAlarmSoundHint(overlay: HTMLElement): void {
+  if (isAlarmSoundActive()) {
+    alarmSoundHint?.remove();
+    alarmSoundHint = null;
+    return;
+  }
+  if (alarmSoundHint) return;
+  alarmSoundHint = el('p', { className: 'mother-alarm-sound-hint' }, 'Tap anywhere on the screen if you don\'t hear the alarm.');
+  overlay.querySelector('.mother-alarm-panel')?.append(alarmSoundHint);
+}
+
+function beginAlarmBeeps(): void {
+  if (!sharedAudioContext || alarmBeepTimer) return;
+
+  const gain = sharedAudioContext.createGain();
+  gain.gain.value = ALARM_GAIN;
+  gain.connect(sharedAudioContext.destination);
+  alarmBeepGain = gain;
+  alarmBeepStep = 0;
+
+  const runBeep = () => {
+    const frequencies = [880, 698, 880, 523];
+    playAlarmBeep(frequencies[alarmBeepStep % frequencies.length]);
+    alarmBeepStep += 1;
+    pulseVibrate();
+  };
+
+  runBeep();
+  alarmBeepTimer = setInterval(runBeep, ALARM_BEEP_MS + ALARM_PAUSE_MS);
+}
+
+function startAlarmSound(overlay?: HTMLElement): void {
+  if (alarmBeepTimer) return;
+  unlockMotherAlarmAudio();
+
+  const ctx = sharedAudioContext;
+  if (!ctx) {
+    if (overlay) updateAlarmSoundHint(overlay);
+    return;
+  }
+
+  const start = () => {
+    if (ctx.state !== 'running') {
+      if (overlay) updateAlarmSoundHint(overlay);
+      return;
+    }
+    beginAlarmBeeps();
+    if (overlay) updateAlarmSoundHint(overlay);
+  };
+
+  if (ctx.state === 'running') {
+    start();
+  } else {
+    void ctx.resume().then(start).catch(() => {
+      if (overlay) updateAlarmSoundHint(overlay);
+    });
+  }
+}
+
+function stopAlarmSound(): void {
+  stopAlarmBeepsOnly();
+}
+
+function disposeMotherAlarmAudio(): void {
+  clearAlarmSoundRetryTimer();
+  stopAlarmBeepsOnly();
+  if (sharedAudioContext) {
+    void sharedAudioContext.close();
+    sharedAudioContext = null;
+  }
 }
 
 function removeOverlay(): void {
+  clearAlarmSoundRetryTimer();
   activeOverlay?.remove();
   activeOverlay = null;
   showingAlarmId = null;
@@ -185,11 +297,16 @@ function showAlarmOverlay(alarm: MotherAlarm): void {
   document.body.classList.add('mother-alarm-open');
   activeOverlay = overlay;
 
-  startAlarmSound();
-  overlay.addEventListener('pointerdown', () => {
-    if (!alarmBeepTimer) startAlarmSound();
-    else void alarmAudioContext?.resume();
-  }, { once: true });
+  startAlarmSound(overlay);
+
+  const retrySound = () => {
+    unlockMotherAlarmAudio();
+    if (!isAlarmSoundActive()) startAlarmSound(overlay);
+    else updateAlarmSoundHint(overlay);
+  };
+
+  overlay.addEventListener('pointerdown', retrySound, { capture: true });
+  alarmSoundRetryTimer = setInterval(retrySound, 900);
 
   const dismiss = () => {
     markDismissedToday(alarm.id);
@@ -233,6 +350,8 @@ export function setMotherAlarmList(list: MotherAlarm[]): void {
 export async function ensureMotherAlarmService(): Promise<void> {
   if (!canShowMotherAlarms()) return;
 
+  installMotherHubAlarmAudioUnlock();
+
   if (!serviceStarted) {
     serviceStarted = true;
     tickTimer = setInterval(() => checkAlarms(), TICK_MS);
@@ -249,11 +368,13 @@ export async function ensureMotherAlarmService(): Promise<void> {
 
 export function teardownMotherAlarmService(): void {
   motherHubAlarmSurfaceActive = false;
+  teardownMotherHubAlarmAudioUnlock();
   serviceStarted = false;
   if (tickTimer) {
     clearInterval(tickTimer);
     tickTimer = null;
   }
   removeOverlay();
+  disposeMotherAlarmAudio();
   alarms = [];
 }
